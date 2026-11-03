@@ -1,0 +1,151 @@
+# ============================================================
+# .htaccess — Casa Bosque
+# Fuerza HTTPS y aplica cabeceras de seguridad (OWASP A04 / ISO 27001)
+# ============================================================
+# InfinityFree corre sobre Apache tras un proxy: la conexión del
+# cliente puede ser HTTPS aunque %{HTTPS} llegue como "off". Por eso
+# se evalúa también la cabecera X-Forwarded-Proto que envía el proxy.
+# ------------------------------------------------------------
+
+# ── La raíz ──
+# index.php no es una portada: es un desvío. Personal con sesión → su
+# panel; cualquier otro → acceso.php. El sistema es una herramienta de
+# control interno y no tiene sitio público.
+DirectoryIndex index.php
+
+# ── Páginas de error del servidor (estáticas, a prueba de fallos) ──
+# Si PHP o el proxy fallan (500/502/503/504) y no hay cuerpo propio, se
+# muestra caido.html en vez de la pantalla cruda del servidor. La pantalla
+# de mantenimiento (503 con cuerpo propio, vía maintenance.flag) NO se ve
+# afectada: Apache respeta su HTML y no la reemplaza.
+ErrorDocument 500 /caido.html
+ErrorDocument 502 /caido.html
+ErrorDocument 503 /caido.html
+ErrorDocument 504 /caido.html
+
+RewriteEngine On
+
+# ── Forzar HTTPS ──
+# Redirige a https solo si NI la variable HTTPS NI el proxy indican
+# una conexión segura. Evita bucles de redirección tras el proxy.
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ── Cabeceras de seguridad (si mod_headers está disponible) ──
+<IfModule mod_headers.c>
+    # HSTS: obliga a los navegadores a usar HTTPS durante 1 año.
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    # Endurecimiento adicional.
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# ── Cache de archivos estaticos ──
+# Las imagenes, fuentes y hojas de estilo no cambian de contenido sin cambiar
+# de nombre, asi que se pueden guardar un ano. Antes iban con 7 dias, y el
+# navegador volvia a pedirlas cada semana sin necesidad.
+#
+# Las paginas .php NO entran aqui: llevan datos de huespedes y responden con
+# no-store. Una pagina cacheada podria mostrarle a alguien la cuenta de otro.
+#
+# Esa cabecera la manda PHP al abrir la sesion, y auth.php fija el valor que la
+# produce (ini_set session.cache_limiter = nocache) para no depender del
+# php.ini del hosting. Si alguien quita esa linea, los .php se quedan SIN
+# no-store y aqui no hay nada que lo compense: van juntas.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(webp|avif|jpe?g|png|gif|svg|ico|woff2?|ttf|eot)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "\.(css|js)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>
+
+# Compresion, por si el servidor no la aplica ya.
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+# ── Proteger rutas sensibles — PRIMERA capa, con RewriteRule ──
+# Se hace con RewriteRule [F,L] y no solo con <FilesMatch> + Require
+# porque LiteSpeed (lo que corre Hostinger detras de su CDN) ignora EN
+# SILENCIO las directivas de autorizacion de un .htaccess: no da error,
+# simplemente sirve el archivo. mod_rewrite si lo respeta, y Apache
+# tambien, asi que esta forma funciona en los dos servidores.
+#
+# El manifiesto de la PWA sale primero con [L] para que el bloqueo de
+# .json que viene despues no lo alcance.
+RewriteRule ^manifest\.json$ - [L]
+
+RewriteRule ^(logs|config_privado)/ - [F,L]
+RewriteRule (^|/)\.env - [F,L]
+RewriteRule (^|/)\.git - [F,L]
+RewriteRule \.(sql|flag|log|md|json)$ - [F,L]
+RewriteRule ^composer\.(json|lock)$ - [F,L]
+
+# ── SEGUNDA capa, para servidores que si respetan la autorizacion ──
+# .log  → logs/fallos.log lleva la ruta, la línea y el mensaje real de
+#         cada excepción. Servirlo es regalar el mapa del sistema.
+#         Hay además un .htaccess propio dentro de logs/.
+# .md   → CHANGELOG.md describe los hallazgos de seguridad y cómo se
+#         cerraron. Es documentación interna, no una página.
+# El servidor actual ya los bloquea por su cuenta; esto hace que la
+# protección sea del proyecto y no del hosting de turno.
+<FilesMatch "(^\.env|\.sql|\.flag|\.json|\.log|\.md|composer\.(json|lock))$">
+    Require all denied
+</FilesMatch>
+
+# Excepción: el manifiesto de la PWA SÍ debe ser accesible por el navegador.
+<Files "manifest.json">
+    Require all granted
+</Files>
+
+# ── La version de PHP no se publica ──
+# El servidor mandaba `X-Powered-By: PHP/8.3.36`: la version exacta con parche,
+# que es media linea de regalo para quien busque un CVE que encaje. `expose_php`
+# es ajuste del php.ini y no se puede tocar desde aqui, pero la cabecera si se
+# puede quitar al salir. HAY QUE COMPROBARLO POR HTTP: en LiteSpeed no todo lo
+# que se escribe en un .htaccess surte efecto.
+<IfModule mod_headers.c>
+    Header always unset X-Powered-By
+    Header unset X-Powered-By
+</IfModule>
+
+# ── El panel de avisos responde por su subdominio, no por el del hotel ──
+# El subdominio avisos.casabosque.online tiene su raiz DENTRO de la del hotel:
+# public_html/avisos_public. Eso deja el panel servido en dos URLs distintas,
+# y la del hotel comparte origen con el sistema, asi que una falla ahi tocaria
+# las cookies y el almacenamiento del hotel.
+#
+# ESTA REGLA NO ES LA QUE BLOQUEA. Se probo por HTTP y la ruta seguia dando
+# 200: mod_rewrite NO hereda las reglas del directorio padre cuando el hijo
+# tiene su propio `RewriteEngine On`, y avisos_public/.htaccess lo tiene. El
+# bloqueo de verdad vive ALLI, condicionado al nombre de host.
+#
+# Se deja como segunda capa: si algun dia ese archivo desaparece, esta regla
+# pasa a ser la que responde. Y queda escrito por que no basta, para que nadie
+# la de por buena sin comprobarla.
+RewriteRule ^avisos_public(/|$) - [F,L]
+
+# ── Las pruebas no son una pagina ──
+# pruebas/ lleva las suites que respaldan cada version. NO se suben al
+# servidor: son codigo de laboratorio, hablan con otra base y por ahi no tienen
+# nada que hacer. La regla esta igual, porque un dia alguien va a subir la
+# carpeta entera sin pensarlo, y los .php no los tapa ninguna de las reglas de
+# arriba: esas bloquean extensiones, y un .php se sirve ejecutandolo.
+RewriteRule ^pruebas(/|$) - [F,L]
+
+# ── Los directorios que solo existen para ser incluidos ──
+# includes/ y config/ no son paginas: nadie deberia poder pedirlos. Hoy
+# responden 200 con el cuerpo vacio, asi que no filtran nada MIENTRAS PHP los
+# ejecute. El dia que PHP no corra -un modulo caido, una extension renombrada,
+# una migracion a medias- se servirian como texto, y config/database.php lleva
+# la logica de conexion.
+#
+# Comprobado antes de poner la regla: ningun archivo del navegador pide nada de
+# esas dos carpetas; las unicas menciones estan en comentarios.
+#
+# config_privado/ ya estaba bloqueado arriba; config/ no lo estaba.
+RewriteRule ^(includes|config)/ - [F,L]

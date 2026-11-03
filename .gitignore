@@ -1,0 +1,39 @@
+# ── Secretos y configuración privada — NUNCA versionar ──
+.env
+.env.local
+.env.*.local
+# Se ignora el CONTENIDO, no la carpeta: con "config_privado/" a secas git
+# no entra a mirar dentro y la excepcion de abajo no tendria efecto.
+config_privado/*
+# La proteccion si viaja con el repo: sin ella la carpeta queda servida.
+!config_privado/.htaccess
+
+# Flags de estado / mantenimiento
+*.flag
+
+# Claves / certificados (por si acaso)
+*.jks
+*.pem
+*.key
+keystore.properties
+
+# Sistema operativo / editores
+Thumbs.db
+.DS_Store
+*~
+.vscode/
+.idea/
+
+# Logs de runtime
+logs/*.log
+
+# Respaldos locales antes de un rediseno
+*.backup-*
+
+# El laboratorio de pruebas NO se versiona.
+# Dentro hay una copia entera del proyecto, el datadir de su MariaDB y un .env
+# con sus propias claves de cifrado. Las suites de pruebas si viajan con el
+# repo; el laboratorio lo monta cada quien, como explica pruebas/LEEME.md.
+pruebas/lab_equipos/
+pruebas/*.out
+pruebas/*.log

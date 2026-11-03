@@ -1,0 +1,111 @@
+/* ============================================================
+   MOBILE RESPONSIVE — Armazón móvil (Casa Bosque)
+   ÚNICA fuente de la estructura de la página en móvil: body, .app-layout,
+   .main-content, .content-area, .top-bar, .card y su cuerpo.
+
+   ESTO ES UNA CONSOLIDACIÓN, no una reescritura. Antes la estructura se
+   declaraba a trozos en mobile-responsive.css, dashboard-mobile.css y
+   modules-mobile.css, y GANABA LA ÚLTIMA con !important (el orden de carga es
+   el de header.php). Lo que hay aquí es el valor que ya se aplicaba, escrito
+   una sola vez. Los dos casos que no son obvios:
+
+     · .content-area padding-bottom es 12px, no 90px. dashboard-mobile.css
+       decía 90px, pero modules-mobile.css —cargado después— lo dejaba en 12px.
+       El espacio frente a la barra fija no lo pone este padding sino
+       `.app-version` (footer.php), que reserva 70px + safe-area.
+     · body y .main-content tienen max-width: 100%, no 100vw. Mismo motivo: la
+       declaración de 100vw de aquí perdía contra la de dashboard-mobile.css.
+
+   Si vas a cambiar un valor de esta hoja, mide primero lo que se aplica de
+   verdad (getComputedStyle a 375, 480 y 768 px): el orden manda y ya costó
+   confundirse una vez.
+   ============================================================ */
+
+@media (max-width: 768px) {
+
+    /* ════════ NADA SE SALE DE LA PANTALLA ════════ */
+    body {
+        overflow-x: hidden !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        position: relative;
+    }
+
+    /* El layout deja de ser flex (sidebar al lado) y pasa a bloque */
+    .app-layout {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+    }
+
+    /* Sidebar oculto fuera de pantalla SIN ocupar espacio de scroll */
+    .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        width: 260px !important;
+        max-width: 80vw !important;
+    }
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    /* Contenido ocupa todo el ancho, sin margen del sidebar */
+    .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+        padding-bottom: 12px !important; /* el hueco de la barra lo reserva .app-version */
+    }
+
+    .content-area {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: var(--space-3) var(--space-3) 12px !important; /* abajo 12px: ver arriba */
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
+    }
+
+    /* Todo hijo directo respeta el ancho del viewport */
+    .content-area > * {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Top bar dentro del ancho */
+    .top-bar {
+        width: 100% !important;
+        max-width: 100vw !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Cualquier grid inline de 2 columnas se apila */
+    [style*="grid-template-columns: 380px"],
+    [style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* ════════ CARDS ════════ */
+    .card {
+        margin-bottom: var(--space-4);
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden;
+    }
+
+    .card-body {
+        padding: var(--space-3) !important;
+    }
+
+    .card-body > div[style*="text-align: center"] {
+        padding: var(--space-5) var(--space-3) !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .top-bar {
+        padding: 0 var(--space-3) !important;
+    }
+}

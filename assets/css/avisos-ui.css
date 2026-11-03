@@ -1,0 +1,126 @@
+/* ============================================================
+   AVISOS Y CAMPOS OBLIGATORIOS — 4.2.0
+   Archivo: assets/css/avisos-ui.css
+   ------------------------------------------------------------
+   La notificación tiene el estilo de la barra del módulo (.top-bar de styles.css): el mismo cristal (blanco al 70-80 %
+   con desenfoque de 14 px), el mismo borde suave, el título en el serif de la marca y los colores de estado de la marca.
+   NO hay negro: el texto es el café de la marca (--cb-forest, --cb-text) y sus grises cálidos.
+
+   Se carga en header.php y en acceso.php (que no tiene header). Por eso cada variable lleva su valor de respaldo.
+   ============================================================ */
+
+/* ── La notificación ───────────────────────────────────────── */
+#cb-avisos {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + var(--header-height, 65px) + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(440px, calc(100vw - 20px));
+    z-index: 100001;                 /* por encima de la transición de página (99999) y del aviso del proveedor (100000) */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;            /* el contenedor no tapa la pantalla: solo cada aviso recibe toques */
+}
+.cb-aviso {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 11px 13px 13px;
+    overflow: hidden;
+    pointer-events: auto;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.82);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(219, 230, 214, 0.85);
+    border-radius: var(--radius-lg, 14px);
+    box-shadow: 0 8px 24px rgba(42, 23, 9, 0.12), 0 1px 3px rgba(42, 23, 9, 0.05);
+    opacity: 0;
+    transform: translateY(-28px);
+    transition: transform .45s cubic-bezier(.2, .9, .3, 1.15), opacity .3s ease;
+    touch-action: pan-x;
+}
+.cb-aviso.cb-on  { opacity: 1; transform: translateY(0); }
+.cb-aviso.cb-off { opacity: 0; transform: translateY(-18px); transition-duration: .25s; }
+.cb-aviso__ic {
+    flex: 0 0 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    font-size: 1.05rem;
+}
+.cb-aviso__tx { flex: 1; min-width: 0; }
+.cb-aviso__tt {
+    font-family: var(--font-serif, 'Newsreader', Georgia, serif);
+    font-size: 1.02rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    color: var(--cb-forest, #3E2412);
+}
+.cb-aviso__bd {
+    margin-top: 1px;
+    font-size: .8rem;
+    line-height: 1.35;
+    color: #6e6054;
+    overflow-wrap: anywhere;
+}
+.cb-aviso__ac {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--cb-primary, #6B4420);
+    text-decoration: underline;
+}
+.cb-aviso__pg { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(42, 23, 9, 0.05); }
+.cb-aviso__pg i { display: block; height: 100%; background: currentColor; opacity: .55; transform-origin: left; animation: cb-aviso-pg linear forwards; }
+.cb-aviso:hover .cb-aviso__pg i { animation-play-state: paused; }
+@keyframes cb-aviso-pg { to { transform: scaleX(0); } }
+
+/* Colores de estado: los de la marca (styles.css: --success, --danger, --warning). */
+.cb-aviso--success .cb-aviso__ic { background: var(--success-bg, #E6F2EA); color: var(--success, #1F7A4D); }
+.cb-aviso--danger  .cb-aviso__ic { background: var(--danger-bg,  #FBEDEC); color: var(--danger,  #B3261E); }
+.cb-aviso--warning .cb-aviso__ic { background: var(--warning-bg, #FAF0DC); color: var(--warning, #A8701A); }
+.cb-aviso--info    .cb-aviso__ic { background: var(--cb-arena,   #EDE3D2); color: var(--cb-primary, #6B4420); }
+.cb-aviso--success .cb-aviso__pg { color: var(--success, #1F7A4D); }
+.cb-aviso--danger  .cb-aviso__pg { color: var(--danger,  #B3261E); }
+.cb-aviso--warning .cb-aviso__pg { color: var(--warning, #A8701A); }
+.cb-aviso--info    .cb-aviso__pg { color: var(--cb-primary, #6B4420); }
+
+@media (prefers-reduced-motion: reduce) {
+    .cb-aviso { transition: opacity .2s ease; transform: none; }
+    .cb-aviso__pg i { animation: none; }
+}
+
+/* ── Los recuadros de cada pantalla, cuando la notificación ya dijo lo mismo ─────────────────
+   avisos-ui.js pone la clase `cb-avisos` en el body SOLO cuando muestra un aviso. Sin JavaScript el recuadro de la pantalla
+   sigue ahí y el mensaje no se pierde. El aviso fijo de Seguridad («debes activar el 2FA», `.fijo`) NO se oculta: tiene que
+   quedarse a la vista hasta que se haga. */
+body.cb-avisos :is(.ci-msg, .co-msg, .cs-msg, .hb-msg, .hu-msg, .rs-msg, .us-msg, .pc-msg, .ret-msg,
+                    .sec-msg:not(.fijo), .fc-alert, .pr-card[role="status"], .rc-flash, .cb-msg-inline) {
+    display: none !important;
+}
+
+/* ── Campos obligatorios ───────────────────────────────────── */
+.cb-req { color: var(--danger, #B3261E); font-weight: 600; }
+
+/* El borde y el fondo con !important: cada pantalla define el suyo en su <style>, que carga DESPUÉS de esta hoja.
+   Solo `background-color`, nunca `background`: los <select> llevan su flecha como imagen de fondo. */
+.cb-falta {
+    border-color: var(--danger, #B3261E) !important;
+    background-color: #FFF8F7 !important;
+    box-shadow: 0 0 0 3px rgba(179, 38, 30, 0.10) !important;
+    animation: cb-falta-sacudida .35s;
+}
+@keyframes cb-falta-sacudida { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.cb-falta-msg {
+    margin-top: 3px;
+    font-size: .74rem;
+    line-height: 1.3;
+    color: var(--danger, #B3261E);
+}
+@media (prefers-reduced-motion: reduce) { .cb-falta { animation: none; } }

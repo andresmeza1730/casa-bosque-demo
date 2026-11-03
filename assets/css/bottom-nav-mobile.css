@@ -1,0 +1,214 @@
+/* ============================================================
+   BOTTOM NAVIGATION (Menú Inferior) — Solo Móviles
+   Sistema Casa Hotel
+
+   Podada en 3.8.0. Salieron: las reglas de tablas (.table-wrapper y la
+   regla GLOBAL `table { min-width: 600px; white-space: nowrap }`, que
+   recortaba las columnas de las pantallas con tabla), .stats-grid,
+   .stat-card, .content-header y .form-control, que ninguna pantalla usa,
+   y los padding de .content-area/.main-content que SIEMPRE perdian contra
+   mobile-responsive.css (esa hoja los declara con !important y es ahora
+   la unica fuente del armazon).
+
+   Quedan la barra inferior y los botones. El `Mas` de la barra es un
+   enlace a menu.php: el menu flotante (.more-menu, .more-overlay) y
+   bottom-nav-mobile.js estan desactivados y se limpiaran juntos aparte.
+   ============================================================ */
+
+/* --- OCULTAR SIDEBAR Y BOTÓN HAMBURGUESA EN MÓVIL --- */
+@media (max-width: 768px) {
+    /* Ocultar sidebar lateral completamente */
+    .sidebar {
+        display: none !important;
+    }
+
+    /* Ocultar botón hamburguesa */
+    .mobile-menu-toggle {
+        display: none !important;
+    }
+
+    /* Ocultar overlay */
+    .sidebar-overlay {
+        display: none !important;
+    }
+
+    /* --- MENÚ INFERIOR (Bottom Navigation Bar) --- */
+    .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 70px;
+        background: white;
+        border-top: 1px solid var(--gray-200);
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        z-index: 1000;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
+        padding: 0 var(--space-2);
+    }
+
+    .bottom-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        color: var(--gray-500);
+        font-size: var(--font-size-xs);
+        padding: var(--space-2);
+        border-radius: var(--radius-md);
+        transition: all 0.2s ease;
+        min-width: 60px;
+        gap: var(--space-1);
+    }
+
+    .bottom-nav-item i {
+        font-size: 1.25rem;
+        margin-bottom: 2px;
+    }
+
+    .bottom-nav-item.active {
+        color: var(--primary);
+        background: var(--primary-light);
+        font-weight: 600;
+    }
+
+    .bottom-nav-item:active {
+        transform: scale(0.95);
+    }
+
+    /* --- MENÚ DESPLEGABLE "MÁS" --- */
+    .more-menu {
+        position: absolute;
+        bottom: 80px;
+        right: 0;
+        background: white;
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        min-width: 200px;
+        padding: var(--space-2) 0;
+        display: none;
+        z-index: 1001;
+    }
+
+    .more-menu.active {
+        display: block;
+        animation: slideUpMenu 0.2s ease;
+    }
+
+    @keyframes slideUpMenu {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .more-menu a {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        color: var(--gray-700);
+        text-decoration: none;
+        font-size: var(--font-size-sm);
+        transition: background 0.15s ease;
+    }
+
+    .more-menu a:hover,
+    .more-menu a:active {
+        background: var(--gray-50);
+    }
+
+    .more-menu a i {
+        width: 20px;
+        text-align: center;
+        color: var(--gray-400);
+    }
+
+    /* Overlay para cerrar menú "Más" */
+    .more-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: transparent;
+        z-index: 999;
+        display: none;
+    }
+
+    .more-overlay.active {
+        display: block;
+    }
+
+    /* --- AJUSTES ADICIONALES PARA MÓVIL --- */
+
+    /* Botones más grandes para táctil */
+    .btn {
+        min-height: 44px;
+        padding: var(--space-3) var(--space-4);
+    }
+
+    .btn-sm {
+        min-height: 36px;
+        padding: var(--space-2) var(--space-3);
+    }
+}
+
+/* --- MÓVILES PEQUEÑOS (≤480px) --- */
+@media (max-width: 480px) {
+    .bottom-nav {
+        height: 65px;
+        padding: 0;
+    }
+
+    .bottom-nav-item {
+        font-size: 0.65rem;
+        min-width: 55px;
+        padding: var(--space-1);
+    }
+
+    .bottom-nav-item i {
+        font-size: 1.1rem;
+    }
+}
+
+/* --- LANDSCAPE EN MÓVILES --- */
+@media (max-width: 768px) and (orientation: landscape) {
+    .bottom-nav {
+        height: 60px;
+    }
+
+    .bottom-nav-item {
+        font-size: 0.65rem;
+    }
+
+    .bottom-nav-item i {
+        font-size: 1rem;
+    }
+}
+
+/* --- DESKTOP: NO AFECTAR NADA --- */
+@media (min-width: 769px) {
+    /* El menú inferior NO se muestra en desktop */
+    .bottom-nav,
+    .more-overlay {
+        display: none !important;
+    }
+
+    /* Sidebar lateral sigue igual */
+    .sidebar {
+        display: block !important;
+    }
+
+    .main-content {
+        margin-left: var(--sidebar-width);
+        padding-bottom: 0;
+    }
+}

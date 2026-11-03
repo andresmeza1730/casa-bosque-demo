@@ -1,0 +1,33 @@
+# ============================================================
+#  logs/ — nada de aquí dentro se sirve por web
+# ============================================================
+#  Esta carpeta está dentro de la raíz pública porque PHP tiene
+#  que poder escribir en ella. Lo que guarda NO es público:
+#
+#    fallos.log          el detalle real de cada error no
+#                        controlado: ruta del archivo, número de
+#                        línea y mensaje de la excepción.
+#    notificaciones.log  la actividad del envío de avisos.
+#
+#  El servidor actual ya devuelve 403 aquí por su propia
+#  configuración, pero eso es suyo, no nuestro: si el sistema se
+#  mueve a otro hosting, la protección se queda atrás. Este
+#  archivo la hace del proyecto, y viaja con él.
+#
+#  Hay una segunda capa en el .htaccess de la raíz, que bloquea
+#  cualquier .log esté donde esté. Las dos son a propósito: si
+#  una se cae, la otra sostiene.
+# ------------------------------------------------------------
+
+# PRIMERA capa: mod_rewrite, que LiteSpeed si respeta.
+RewriteEngine On
+RewriteRule ^ - [F,L]
+
+# SEGUNDA capa, para servidores que respetan la autorizacion.
+Require all denied
+
+# Apache 2.2, por si el hosting fuera antiguo.
+<IfModule !mod_authz_core.c>
+    Order Deny,Allow
+    Deny from all
+</IfModule>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema en pausa — Casa Bosque</title>
+<meta name="theme-color" content="#3E2412">
+<link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400..600&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Página de caída del servidor. Estática: sin PHP, sin base de datos y sin
+   librerías. Los tipos de letra vienen de Google Fonts, pero hay respaldo
+   (Georgia y la fuente del sistema), así que sin esa conexión se ve igual.
+
+   EL LETRERO. La idea sale del hotel: el letrero que se cuelga en la manija de
+   una puerta. El sistema está «en pausa» como una habitación con el letrero
+   puesto: es temporal y no significa que algo se perdió.
+
+   OJO: includes/fallos.php reutiliza esta página y le añade, justo antes de
+   cerrar el body, el código de referencia del fallo. Esa etiqueta de cierre
+   NO debe aparecer escrita en ningún comentario: fallos.php reemplaza TODAS
+   las veces que la encuentra, y el aviso acabaría también dentro del comentario.
+   Por eso el body es una COLUMNA (con una fila, el aviso quedaba a un lado) y
+   el fondo es CLARO: el aviso que se inserta lleva colores claros en línea. */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--tinta:#2A1709;--corteza:#3E2412;--cafe:#6B4420;--bronce:#9C6728;--oro:#C8963C;--crema:#FBF8F2;--arena:#EDE3D2;--apagado:#6F5F4E}
+html{-webkit-text-size-adjust:100%}
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;font-family:'Outfit',system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--tinta);line-height:1.6;
+     background:radial-gradient(700px 380px at 88% 4%,rgba(200,150,60,.16),transparent 62%),var(--crema)}
+main{width:100%;max-width:62rem;flex:1;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:clamp(24px,5vw,64px);align-items:center;padding:clamp(28px,6vw,72px) clamp(20px,5vw,40px)}
+.marca{display:flex;align-items:center;gap:10px;margin-bottom:clamp(22px,4vw,40px)}
+.marca img{width:34px;height:34px;border-radius:9px}
+.marca span{font-family:'Newsreader',Georgia,serif;font-size:1.2rem;font-weight:500;color:var(--corteza)}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--cafe)}
+.eyebrow::before{content:'';width:28px;height:2px;background:var(--oro)}
+h1{font-family:'Newsreader',Georgia,serif;font-weight:500;font-size:clamp(2.1rem,6vw,3.5rem);line-height:1.05;letter-spacing:-.02em;color:var(--corteza);margin:14px 0 16px}
+.lead{font-size:1.08rem;color:var(--apagado);max-width:32rem;margin-bottom:26px}
+.acciones{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:34px}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;border-radius:12px;font:600 .98rem 'Outfit',system-ui,sans-serif;text-decoration:none;cursor:pointer;border:1px solid var(--corteza)}
+.btn-p{background:var(--corteza);color:#fff}
+.btn-p:hover{background:var(--cafe)}
+.btn-s{background:transparent;color:var(--corteza)}
+.btn-s:hover{background:var(--arena)}
+:focus-visible{outline:3px solid var(--oro);outline-offset:3px}
+.mientras{border-top:1px solid var(--arena);padding-top:20px;max-width:34rem}
+.mientras h2{font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--apagado);font-weight:600;margin-bottom:10px}
+.mientras ol{list-style:none;counter-reset:m;display:flex;flex-direction:column;gap:10px}
+.mientras li{counter-increment:m;position:relative;padding-left:38px;font-size:.96rem}
+.mientras li::before{content:counter(m);position:absolute;left:0;top:1px;width:26px;height:26px;border-radius:50%;background:var(--arena);color:var(--corteza);font:600 .85rem 'Outfit',system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
+.mientras b{font-weight:600;color:var(--corteza)}
+
+/* el letrero de puerta */
+.puerta{display:flex;justify-content:center}
+.letrero{width:min(250px,62vw);transform-origin:50% 0;animation:balanceo 5s ease-in-out infinite}
+@keyframes balanceo{0%,100%{transform:rotate(-2.4deg)}50%{transform:rotate(2.4deg)}}
+.letrero svg{display:block;width:100%;height:auto;filter:drop-shadow(0 22px 26px rgba(62,36,18,.28))}
+
+@media(max-width:760px){
+  main{grid-template-columns:1fr;gap:12px}
+  .puerta{order:-1}
+  .letrero{width:min(170px,44vw)}
+}
+@media(prefers-reduced-motion:reduce){.letrero{animation:none}}
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <div class="marca"><img src="/assets/img/emblema-48.png?v=3" alt="" width="34" height="34"><span>Casa Bosque</span></div>
+    <span class="eyebrow">Sistema de gestión</span>
+    <h1>Estamos en pausa por un momento</h1>
+    <p class="lead">No pudimos abrir esta pantalla. Puede ser un mantenimiento o una falla del servidor, y casi siempre se resuelve en unos minutos. Lo que ya estaba guardado sigue ahí.</p>
+    <div class="acciones">
+      <button class="btn btn-p" type="button" onclick="location.reload()">Reintentar</button>
+      <a class="btn btn-s" href="/">Ir al inicio</a>
+    </div>
+    <section class="mientras" aria-labelledby="mientras-t">
+      <h2 id="mientras-t">Si estás en recepción</h2>
+      <ol>
+        <li><b>Sigue atendiendo.</b> Anota a mano las entradas, salidas, consumos y pagos.</li>
+        <li><b>Cuando vuelva el sistema,</b> registra lo que anotaste.</li>
+        <li><b>Si tarda mucho,</b> avisa al administrador. Si abajo aparece un código de referencia, dáselo.</li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="puerta" aria-hidden="true">
+    <div class="letrero">
+      <svg viewBox="0 0 220 360" xmlns="http://www.w3.org/2000/svg">
+        <path d="M110 0 C 92 26, 128 36, 110 62" fill="none" stroke="#9C6728" stroke-width="3" stroke-linecap="round"/>
+        <path d="M30 70 a80 22 0 0 1 160 0 v246 a24 24 0 0 1 -24 24 h-112 a24 24 0 0 1 -24 -24 z" fill="#3E2412"/>
+        <path d="M30 70 a80 22 0 0 1 160 0 v246 a24 24 0 0 1 -24 24 h-112 a24 24 0 0 1 -24 -24 z" fill="none" stroke="#C8963C" stroke-width="3"/>
+        <rect x="44" y="84" width="132" height="242" rx="12" fill="none" stroke="#C8963C" stroke-opacity=".45" stroke-width="1.5"/>
+        <circle cx="110" cy="62" r="17" fill="#FBF8F2"/>
+        <circle cx="110" cy="62" r="17" fill="none" stroke="#C8963C" stroke-width="3"/>
+        <g fill="none" stroke="#E8CA8A" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(110 150)">
+          <rect x="-26" y="-24" width="14" height="48" rx="3"/><rect x="12" y="-24" width="14" height="48" rx="3"/>
+        </g>
+        <text x="110" y="238" text-anchor="middle" font-family="Newsreader,Georgia,serif" font-size="30" font-weight="500" fill="#F3E7D4">En pausa</text>
+        <line x1="76" y1="258" x2="144" y2="258" stroke="#C8963C" stroke-width="2"/>
+        <text x="110" y="286" text-anchor="middle" font-family="Outfit,system-ui,sans-serif" font-size="14" fill="#CDB894">Volvemos en</text>
+        <text x="110" y="306" text-anchor="middle" font-family="Outfit,system-ui,sans-serif" font-size="14" fill="#CDB894">unos minutos</text>
+      </svg>
+    </div>
+  </div>
+</main>
+</body>
+</html>

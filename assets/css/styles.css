@@ -1,0 +1,867 @@
+/* ============================================================
+   Sistema Casa Bosque — Premium Identity Design System
+   Paleta: Verde Bosque, Verde Musgo y Acentos Naturales
+   Optimizado para pantallas de recepción y administración
+   ============================================================ */
+
+/* --- Tipografía Google Fonts (deben ir al INICIO del archivo) --- */
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400..600&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+/* --- Reset & Variables de Identidad --- */
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    /* Paleta de Identidad Casa Bosque — tomada del logo oficial (oro / marron / crema).
+       Regla: el marron sostiene y el oro acentua. El oro da 2.5:1 sobre la crema,
+       asi que NO sirve para texto sobre fondo claro; solo para bordes, iconos,
+       estado activo, o texto sobre marron, donde da 6.4:1. */
+    --primary: #6B4420;             /* Cafe — accion principal */
+    --primary-hover: #53331A;
+    --primary-light: #F5EBDC;
+
+    --secondary: #9C6728;           /* Bronce — accion secundaria, enlaces */
+    --secondary-hover: #7E5120;
+    --secondary-light: #F5EBDC;
+
+    --sun-orange: #A8701A;          /* Ambar — avisos, distinto del marron de marca */
+    --sun-orange-light: #FAF0DC;
+
+    /* Tokens propios Casa Bosque (usados por el dashboard premium) */
+    --cb-bg: #FBF8F2;
+    --cb-card: rgba(255,255,255,.9);
+    --cb-border: #EDE3D2;
+    --cb-primary: #6B4420;
+    --cb-forest: #3E2412;        /* nombre heredado: hoy es la corteza */
+    --cb-moss: #9C6728;          /* nombre heredado: hoy es el bronce */
+    --cb-text: #2A1709;
+    --cb-muted: #9A8778;
+
+    /* El oro del logo. No se usa para texto sobre fondo claro. */
+    --cb-oro: #C8963C;
+    --cb-oro-luz: #E8BA64;      /* solo sobre marron */
+    --cb-arena: #EDE3D2;
+
+    /* Semánticos */
+    --success: #1F7A4D;
+    --success-bg: #E6F2EA;
+    --warning: var(--sun-orange);
+    --warning-bg: var(--sun-orange-light);
+    --danger: #B3261E;
+    --danger-bg: #FBEDEC;
+    --info: #2563EB;
+    --info-bg: #eff6ff;
+
+    /* Neutros calidos, virados a marron para que acompanen a la marca */
+    --gray-50: #F7F2EA;
+    --gray-100: #F1EADF;
+    --gray-200: #EDE3D2;
+    --gray-300: #D9CBB6;
+    --gray-400: #BCA88E;
+    --gray-500: #86715A;
+    --gray-600: #5E4A34;
+    --gray-700: #453520;
+    --gray-800: #33240F;
+    --gray-900: #241607;
+
+    /* Variacion profunda — marron oscuro para el Sidebar */
+    --navy-deep: #2A1709;
+    --navy-dark: #3E2412;
+
+    /* Tipografía Profesional */
+    --font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-serif: 'Newsreader', Georgia, serif;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+    --font-size-3xl: 1.875rem;
+
+    /* Espaciado Armónico */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+
+    /* Bordes y Sombras de Alta Gama */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --shadow-sm: 0 2px 4px rgba(42, 23, 9, 0.02);
+    --shadow-md: 0 4px 12px -1px rgba(42, 23, 9, 0.05), 0 2px 6px -1px rgba(42, 23, 9, 0.03);
+    --shadow-lg: 0 12px 24px -4px rgba(42, 23, 9, 0.08), 0 4px 12px -2px rgba(42, 23, 9, 0.04);
+
+    /* Dimensiones de Maquetación */
+    --sidebar-width: 260px;
+    --header-height: 65px;
+}
+
+/* --- Tipografía (los @import se movieron al inicio del archivo) --- */
+body {
+    font-family: var(--font-family);
+    font-size: var(--font-size-base);
+    color: var(--cb-text);
+    background:
+        radial-gradient(circle at top left, rgba(245,235,220,.75), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(216,197,168,.28), transparent 34%),
+        #FBF8F2;
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    position: relative;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(#e3ddd0 0.6px, transparent 0.6px);
+    background-size: 24px 24px;
+    opacity: .5;
+    z-index: -2;
+    pointer-events: none;
+}
+
+body::after {
+    content: '';
+    position: fixed;
+    width: 500px;
+    height: 500px;
+    background: rgba(156,103,40,.10);
+    filter: blur(120px);
+    top: -150px;
+    left: -150px;
+    z-index: -1;
+    pointer-events: none;
+    animation: cbFloatGlow 10s ease-in-out infinite;
+}
+
+@keyframes cbFloatGlow {
+    0%, 100% { transform: translate(0, 0); }
+    50%      { transform: translate(20px, 30px); }
+}
+
+h1, h2, h3, h4 {
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--navy-deep);
+}
+
+h1 { font-size: var(--font-size-3xl); letter-spacing: -0.02em; }
+h2 { font-size: var(--font-size-2xl); letter-spacing: -0.01em; }
+h3 { font-size: var(--font-size-xl); }
+h4 { font-size: var(--font-size-lg); }
+
+a {
+    color: var(--primary);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+a:hover {
+    color: var(--primary-hover);
+    text-decoration: none;
+}
+
+/* --- Layout Estructural --- */
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar de Lujo Personalizado */
+/* Sidebar Casa Bosque — Marron Profundo */
+.sidebar {
+    width: var(--sidebar-width);
+    background: linear-gradient(180deg, #241607 0%, #3E2412 100%);
+    color: #fff;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    overflow-y: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.04);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.06);
+
+    /* La barra de desplazamiento del propio menú.
+       Con todas las entradas el menú desborda siempre, y el sistema pintaba
+       su barra gris de serie sobre el marrón: parecía un separador entre el
+       menú y el contenido. No se puede ocultar —hace falta poder desplazarlo—,
+       así que se viste con los colores de la casa. */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(200, 150, 60, 0.45) transparent;
+}
+
+/* ── Sugerencias del buscador de huéspedes ──
+   El panel que cae bajo el campo de búsqueda del panel de recepción y del
+   dashboard. Vive aquí, en la hoja compartida, porque lo usan dos pantallas
+   distintas y mañana puede usarlo una tercera. */
+.bh-panel {
+    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 400;
+    background: #fff; border: 1px solid var(--cb-border, #EDE3D2); border-radius: 14px;
+    box-shadow: 0 14px 34px rgba(42, 23, 9, .14);
+    overflow: hidden auto; max-height: 320px;
+}
+.bh-item {
+    display: flex; align-items: baseline; gap: 10px; padding: 11px 14px;
+    cursor: pointer; border-bottom: 1px solid #F7F2EA;
+}
+.bh-item:last-child { border-bottom: none; }
+.bh-item.on, .bh-item:hover { background: var(--cb-primary-light, #F5EBDC); }
+.bh-nombre { flex: 1; min-width: 0; font-size: .9rem; font-weight: 700; color: var(--cb-forest, #3E2412); }
+.bh-meta { font-size: .76rem; color: var(--cb-muted, #9A8778); white-space: nowrap; }
+.bh-hab {
+    flex: none; font-size: .7rem; font-weight: 800; white-space: nowrap;
+    color: var(--cb-primary, #6B4420); background: var(--cb-arena, #EDE3D2);
+    padding: 2px 8px; border-radius: 99px;
+}
+.bh-vacio { justify-content: center; cursor: default; color: var(--cb-muted, #9A8778); font-size: .86rem; }
+.bh-vacio:hover { background: transparent; }
+
+/* Lo mismo para Chrome, Edge y Safari, que todavía no entienden las dos
+   propiedades de arriba. Hacen falta los dos juegos de reglas: ningún
+   navegador cubre ambos por sí solo. */
+.sidebar::-webkit-scrollbar { width: 7px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(200, 150, 60, 0.4);
+    border-radius: 99px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(200, 150, 60, 0.68); }
+
+.sidebar-brand {
+    padding: var(--space-6) var(--space-5);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-brand h2 {
+    color: #fff;
+    font-family: var(--font-serif);
+    font-size: 1.35rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    letter-spacing: 0;
+}
+
+.sidebar-brand h2 i {
+    color: #E8BA64; /* Oro claro del logo */
+}
+
+.sidebar-brand span {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    display: block;
+    margin-top: var(--space-1);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+}
+
+.sidebar-nav {
+    flex: 1;
+    padding: var(--space-4) 0;
+}
+
+.sidebar-nav .nav-section {
+    padding: var(--space-2) var(--space-5);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.35);
+    font-weight: 700;
+    margin-top: var(--space-4);
+}
+
+.sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-5);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    border-left: 4px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.sidebar-nav a:hover {
+    background: rgba(200,150,60, 0.06);
+    color: #fff;
+    text-decoration: none;
+    border-left-color: rgba(200,150,60, 0.5);
+}
+
+.sidebar-nav a.active {
+    background: rgba(200, 150, 60, 0.14);
+    color: #fff;
+    font-weight: 700;
+    border-left-color: #C8963C;
+}
+
+.sidebar-nav a.active .nav-icon {
+    color: #E8BA64;
+}
+
+.sidebar-nav a .nav-icon {
+    width: 20px;
+    text-align: center;
+    font-size: var(--font-size-base);
+    color: rgba(255, 255, 255, 0.4);
+    transition: color 0.2s ease;
+}
+
+.sidebar-user {
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-user .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #C8963C;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: var(--font-size-sm);
+    color: #2A1709;
+}
+
+.sidebar-user .user-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.sidebar-user .user-name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.sidebar-user .user-role {
+    font-size: var(--font-size-xs);
+    color: #E8BA64;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+/* Área de Contenido Principal */
+.main-content {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    min-height: 100vh;
+}
+
+.top-bar {
+    height: var(--header-height);
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(219, 230, 214, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-6);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    box-shadow: 0 1px 3px rgba(42,23,9, 0.03);
+}
+
+.top-bar h1 {
+    font-family: var(--font-serif);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--cb-forest);
+}
+
+.top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.content-area {
+    padding: var(--space-6);
+}
+
+/* --- Paneles y Tarjetas (Cards) Casa Bosque --- */
+.card {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 28px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+    margin-bottom: var(--space-6);
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.card-header {
+    padding: 22px 26px 16px;
+    border-bottom: 1px solid rgba(219, 230, 214, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: transparent;
+}
+
+.card-header h3 {
+    font-size: 1.02rem;
+    font-weight: 800;
+    color: var(--cb-forest);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.card-body {
+    padding: 26px;
+}
+
+/* --- Bloques de Estadísticas (Stats) --- */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-5);
+    margin-bottom: var(--space-6);
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 24px;
+    padding: var(--space-5);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.stat-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-lg);
+    flex-shrink: 0;
+}
+
+/* Ajuste de colores basados en la identidad visual */
+.stat-icon.blue   { background: var(--primary-light); color: var(--primary); }
+.stat-icon.green  { background: var(--success-bg);    color: var(--success); }
+.stat-icon.orange { background: var(--secondary-light);  color: var(--secondary); } /* Reemplazado por dorado */
+.stat-icon.red    { background: var(--danger-bg);     color: var(--danger); }
+
+.stat-info {
+    overflow: hidden;
+}
+
+.stat-info .stat-value {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--navy-deep);
+    line-height: 1.1;
+}
+
+.stat-info .stat-label {
+    font-size: var(--font-size-xs);
+    color: var(--gray-600);
+    font-weight: 500;
+    margin-top: 2px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+/* --- Tablas Administrativas --- */
+.table-wrapper {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--gray-200);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+    background: #fff;
+}
+
+thead {
+    background: var(--gray-50);
+}
+
+thead th {
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    font-weight: 600;
+    color: var(--gray-700);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--gray-200);
+    white-space: nowrap;
+}
+
+tbody td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--gray-100);
+    color: var(--gray-700);
+    vertical-align: middle;
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+tbody tr:hover {
+    background: rgba(42, 23, 9, 0.01); /* Sutil resaltado azul corporativo */
+}
+
+/* --- Etiquetas de Estado (Badges) --- */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-green  { background: var(--success-bg); color: #065f46; }
+.badge-orange { background: var(--secondary-light); color: #856404; } /* Tono dorado/ámbar estable */
+.badge-red    { background: var(--danger-bg); color: #991b1b; }
+.badge-blue   { background: var(--primary-light); color: var(--primary); }
+.badge-gray   { background: var(--gray-100); color: var(--gray-700); }
+
+/* --- Botones --- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    font-family: var(--font-family);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    text-decoration: none;
+    line-height: 1.4;
+}
+
+.btn:hover { text-decoration: none; }
+
+/* Botón Principal - Azul Logo */
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+    box-shadow: 0 2px 4px rgba(42, 23, 9, 0.15);
+}
+.btn-primary:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+}
+
+/* Botón Secundario - Dorado Elegante */
+.btn-success {
+    background: var(--secondary);
+    color: #fff;
+    border-color: var(--secondary);
+}
+.btn-success:hover { 
+    background: var(--secondary-hover); 
+    border-color: var(--secondary-hover);
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: #fff;
+}
+.btn-danger:hover { background: #dc2626; }
+
+.btn-warning {
+    background: var(--sun-orange);
+    color: #fff;
+}
+.btn-warning:hover { background: #d35400; }
+
+.btn-outline {
+    background: #fff;
+    color: var(--gray-700);
+    border-color: var(--gray-300);
+}
+.btn-outline:hover {
+    background: var(--gray-50);
+    color: var(--navy-deep);
+    border-color: var(--gray-400);
+}
+
+.btn-sm {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-size-xs);
+    border-radius: var(--radius-sm);
+}
+
+.btn-lg {
+    padding: var(--space-3) var(--space-6);
+    font-size: var(--font-size-base);
+}
+
+/* --- Componentes de Formularios --- */
+.form-group {
+    margin-bottom: var(--space-4);
+}
+
+.form-group label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--navy-deep);
+    margin-bottom: var(--space-1);
+}
+
+.form-control {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    color: var(--gray-800);
+    background: #fff;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    line-height: 1.4;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(42, 23, 9, 0.1);
+}
+
+select.form-control {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23495057' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+}
+
+textarea.form-control {
+    min-height: 85px;
+    resize: vertical;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-4);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--gray-500);
+    margin-top: var(--space-1);
+}
+
+/* --- Alertas de Sistema --- */
+.alert {
+    padding: var(--space-4) var(--space-5);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    margin-bottom: var(--space-5);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.alert-success { background: var(--success-bg); color: #065f46; border-left: 4px solid var(--success); }
+.alert-danger  { background: var(--danger-bg);  color: #991b1b; border-left: 4px solid var(--danger); }
+.alert-warning { background: var(--warning-bg); color: #856404; border-left: 4px solid var(--warning); }
+.alert-info    { background: var(--info-bg);    color: #1d4ed8; border-left: 4px solid var(--info); }
+
+/* --- Ventana de Login (Premium) --- */
+.login-wrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at top right, var(--navy-deep) 0%, var(--navy-dark) 100%);
+    padding: var(--space-4);
+}
+
+.login-card {
+    background: #fff;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 420px;
+    padding: var(--space-8) var(--space-10);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.login-card .login-header {
+    text-align: center;
+    margin-bottom: var(--space-6);
+}
+
+.login-card .login-header h1 {
+    font-size: var(--font-size-2xl);
+    color: var(--navy-deep);
+    margin-bottom: var(--space-1);
+}
+
+.login-card .login-header p {
+    color: var(--gray-600);
+    font-size: var(--font-size-sm);
+}
+
+.login-card .login-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--secondary-light);
+    color: var(--secondary); /* Icono superior en Dorado */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xl);
+    margin: 0 auto var(--space-4);
+    box-shadow: inset 0 0 0 1px rgba(197, 155, 39, 0.2);
+}
+
+.login-card .btn {
+    width: 100%;
+    justify-content: center;
+    padding: var(--space-3) var(--space-5);
+    background: var(--primary);
+}
+.login-card .btn:hover {
+    background: var(--primary-hover);
+}
+
+/* --- Estados Vacíos --- */
+.empty-state {
+    text-align: center;
+    padding: var(--space-10) var(--space-6);
+    color: var(--gray-500);
+}
+
+.empty-state .empty-icon {
+    font-size: var(--font-size-3xl);
+    color: var(--gray-300);
+    margin-bottom: var(--space-3);
+}
+
+.empty-state p {
+    font-size: var(--font-size-sm);
+    margin-top: var(--space-1);
+}
+
+/* --- Clases de Utilidad Específicas --- */
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.text-muted { color: var(--gray-600); }
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+.text-warning { color: var(--warning); }
+.font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+.font-bold { font-weight: 700; }
+.mt-4 { margin-top: var(--space-4); }
+.mt-6 { margin-top: var(--space-6); }
+.mb-4 { margin-bottom: var(--space-4); }
+.mb-6 { margin-bottom: var(--space-6); }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2 { gap: var(--space-2); }
+.gap-4 { gap: var(--space-4); }
+
+/* Formateo de Moneda Colombiana (COP) */
+.currency {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--navy-deep);
+}
+
+/* --- Adaptabilidad Móvil --- */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+    }
+    .sidebar.open {
+        transform: translateX(0);
+    }
+    .main-content {
+        margin-left: 0;
+    }
+    .stats-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    .content-area {
+        padding: var(--space-4);
+    }
+    .top-bar {
+        padding: 0 var(--space-4);
+    }
+}

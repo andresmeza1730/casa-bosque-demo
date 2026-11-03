@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sin conexión — Casa Bosque</title>
+<meta name="theme-color" content="#2A1709">
+<link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml">
+<style>
+/* Pantalla de «sin conexión» del sistema (la muestra sw.js). Tiene que vivir sola:
+   sin conexión no se puede pedir nada, así que NO lleva tipos de letra externos
+   ni librerías. Lo único que trae de fuera es el emblema, que sw.js precarga.
+
+   LA SEÑAL. Cuatro barras como las de un celular: se encienden de a una mientras
+   el sistema busca la conexión. Y no es solo dibujo: cada 8 segundos la página
+   prueba si ya hay internet, y cuando lo hay vuelve sola a donde estabas. */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--tinta:#2A1709;--corteza:#3E2412;--cafe:#6B4420;--oro:#C8963C;--oro-claro:#E8CA8A;--crema:#F3E7D4;--apagado:#CDB894}
+html{-webkit-text-size-adjust:100%}
+body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;color:var(--crema);line-height:1.6;
+     font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+     background:radial-gradient(640px 420px at 50% -8%,rgba(200,150,60,.22),transparent 65%),linear-gradient(180deg,var(--corteza) 0%,var(--tinta) 100%)}
+.marca{display:flex;align-items:center;gap:10px;padding:20px 22px}
+.marca img{width:32px;height:32px;border-radius:9px;background:#ffffff14}
+.marca span{font-family:Georgia,'Times New Roman',serif;font-size:1.15rem;color:#fff}
+main{flex:1;width:100%;max-width:30rem;margin:0 auto;padding:6px 22px 36px;display:flex;flex-direction:column;justify-content:center}
+
+.senal{display:flex;align-items:flex-end;gap:9px;height:76px;margin-bottom:26px}
+.senal i{display:block;width:16px;border-radius:5px;background:#ffffff1f;animation:busca 2.4s ease-in-out infinite}
+.senal i:nth-child(1){height:22%}
+.senal i:nth-child(2){height:44%;animation-delay:.25s}
+.senal i:nth-child(3){height:68%;animation-delay:.5s}
+.senal i:nth-child(4){height:92%;animation-delay:.75s}
+@keyframes busca{0%,18%{background:#ffffff1f}34%,64%{background:var(--oro)}86%,100%{background:#ffffff1f}}
+
+.etq{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--apagado);font-weight:600}
+h1{font-family:Georgia,'Times New Roman',serif;font-weight:500;font-size:clamp(2.2rem,11vw,3.1rem);line-height:1.05;letter-spacing:-.02em;color:#fff;margin:8px 0 12px}
+.lead{color:var(--crema);opacity:.88;font-size:1.04rem;margin-bottom:22px}
+.estado{display:flex;align-items:center;gap:10px;background:#ffffff12;border:1px solid #ffffff26;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:.96rem}
+.punto{flex:none;width:10px;height:10px;border-radius:50%;background:var(--oro);animation:pulso 1.6s ease-in-out infinite}
+.estado.ok .punto{background:#6FCF97;animation:none}
+@keyframes pulso{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+button{width:100%;min-height:52px;border-radius:13px;border:0;font:700 1rem system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--tinta);background:var(--oro-claro);cursor:pointer}
+button:active{transform:scale(.98)}
+button[disabled]{opacity:.7;cursor:progress}
+:focus-visible{outline:3px solid var(--oro-claro);outline-offset:3px}
+
+.notas{list-style:none;margin-top:30px;padding-top:22px;border-top:1px solid #ffffff22;display:flex;flex-direction:column;gap:14px}
+.notas li{padding-left:16px;position:relative;font-size:.95rem;opacity:.92}
+.notas li::before{content:'';position:absolute;left:0;top:.7em;width:6px;height:6px;border-radius:50%;background:var(--oro)}
+.notas b{color:#fff;font-weight:600}
+@media(prefers-reduced-motion:reduce){.senal i,.punto{animation:none}.senal i:nth-child(-n+2){background:var(--oro)}}
+</style>
+</head>
+<body>
+<div class="marca"><img src="/assets/img/emblema-64.png?v=3" alt="" width="32" height="32"><span>Casa Bosque</span></div>
+
+<main>
+  <div class="senal" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <p class="etq">Sin conexión</p>
+  <h1>No hay internet por ahora</h1>
+  <p class="lead">Esta pantalla necesita conexión. Revisa el wifi o los datos del celular: en cuanto vuelvan, regresas sola a donde estabas.</p>
+
+  <p class="estado" id="estado" role="status" aria-live="polite"><span class="punto" aria-hidden="true"></span><span id="txt">Buscando la conexión…</span></p>
+  <button type="button" id="otra">Probar ahora</button>
+
+  <ul class="notas">
+    <li><b>Lo que ya guardaste está a salvo</b> en el sistema.</li>
+    <li><b>Lo que no alcanzaste a guardar</b> hay que registrarlo otra vez cuando vuelva la conexión.</li>
+    <li><b>Mientras tanto,</b> anota a mano las entradas, los consumos y los pagos.</li>
+  </ul>
+</main>
+
+<script>
+(function () {
+  var estado = document.getElementById('estado'), txt = document.getElementById('txt'), boton = document.getElementById('otra');
+  var probando = false;
+
+  /* ¿Hay internet de verdad? navigator.onLine solo dice si hay red local; se pide una página pública al propio sitio.
+     Va con un número distinto cada vez y sin caché: así ni el navegador ni el service worker contestan por la red. */
+  function hayRed() {
+    return fetch('/acceso.php?ping=' + Date.now(), { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok; }, function () { return false; });
+  }
+  function volver() {
+    estado.className = 'estado ok';
+    txt.textContent = 'Conexión recuperada. Volviendo…';
+    setTimeout(function () { location.reload(); }, 600);
+  }
+  function probar(manual) {
+    if (probando) return;
+    probando = true;
+    if (manual) { boton.disabled = true; txt.textContent = 'Probando la conexión…'; }
+    hayRed().then(function (ok) {
+      probando = false; boton.disabled = false;
+      if (ok) return volver();
+      txt.textContent = manual ? 'Sigue sin conexión. Seguimos intentando.' : 'Buscando la conexión…';
+    });
+  }
+  boton.addEventListener('click', function () { probar(true); });
+  window.addEventListener('online', function () { probar(false); });
+  setInterval(function () { probar(false); }, 8000);
+})();
+</script>
+</body>
+</html>

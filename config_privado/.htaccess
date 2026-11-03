@@ -1,0 +1,36 @@
+# ============================================================
+#  config_privado/ — nada de aquí dentro se sirve por web
+# ============================================================
+#  Esta carpeta está dentro de la raíz pública porque PHP tiene
+#  que poder leerla y escribirla. Lo que guarda NO es público:
+#
+#    maintenance.flag            el interruptor del modo
+#                                mantenimiento.
+#    casabosque-firebase.json    la credencial de servicio de
+#                                Firebase para los avisos.
+#
+#  Se cierra la carpeta COMPLETA, no una lista de extensiones:
+#  una lista hay que acordarse de ampliarla cada vez que entra
+#  un archivo nuevo, y el día que alguien lo olvide la
+#  credencial queda servida. Negar todo no se olvida.
+#
+#  Lo que había antes aquí NO protegía nada: era una copia del
+#  .htaccess de la raíz, con su propia cabecera diciendo
+#  "subir a la raíz del sitio". Repetía el forzado de HTTPS y
+#  las cabeceras de seguridad que la raíz ya aplica a todo el
+#  sitio, y traía un ErrorDocument 403 que convertía el acceso
+#  denegado en un error 500.
+# ------------------------------------------------------------
+
+# PRIMERA capa: mod_rewrite, que LiteSpeed si respeta.
+RewriteEngine On
+RewriteRule ^ - [F,L]
+
+# SEGUNDA capa, para servidores que respetan la autorizacion.
+Require all denied
+
+# Apache 2.2, por si el hosting fuera antiguo.
+<IfModule !mod_authz_core.c>
+    Order Deny,Allow
+    Deny from all
+</IfModule>

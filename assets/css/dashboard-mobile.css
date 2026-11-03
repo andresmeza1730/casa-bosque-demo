@@ -1,0 +1,17 @@
+/* ============================================================
+   DASHBOARD MOBILE — vaciado en 3.8.0
+   ============================================================
+   Esta hoja era del «dashboard premium» de una versión anterior, y casi todo
+   lo que traía ya no apuntaba a nada: .dashboard-metrics-grid, .metric-*,
+   .premium-blur-*, .analytics-section-grid, .state-pill-box, .card-header,
+   .table-wrapper… no aparecen en ninguna pantalla. El panel actual lleva sus
+   estilos en el <style> de dashboard.php (prefijo dx-).
+
+   Lo que SÍ se aplicaba —body, .app-layout, .main-content, .content-area,
+   .content-area > *, .card y .card-body— se movió a mobile-responsive.css,
+   que es ahora la única fuente del armazón móvil, con los valores que de
+   verdad ganaban.
+
+   El archivo se queda porque header.php lo enlaza. No pongas aquí reglas del
+   armazón: van en mobile-responsive.css.
+   ============================================================ */

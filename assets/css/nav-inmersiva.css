@@ -1,0 +1,191 @@
+/* ============================================================
+   nav-inmersiva.css — Casa Bosque
+   1) Barra inferior inmersiva para el recepcionista
+   2) Ajustes móviles para módulos de admin
+   Cargar DESPUÉS de bottom-nav-mobile.css en header.php
+   ============================================================ */
+
+@media (max-width: 768px) {
+
+  /* ---- BARRA INMERSIVA (recepcionista) ---- */
+  .bottom-nav.bn-recepcion {
+      height: 74px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-top: none;
+      border-radius: 26px 26px 0 0;
+      box-shadow: 0 -8px 30px rgba(62,36,18, 0.16);
+      padding: 0 var(--space-3, 12px);
+      overflow: visible;
+  }
+
+  .bottom-nav.bn-recepcion .bottom-nav-item {
+      color: #9A8778;
+      gap: 3px;
+  }
+  .bottom-nav.bn-recepcion .bottom-nav-item.active {
+      color: #6B4420;
+  }
+  .bottom-nav.bn-recepcion .bottom-nav-item.active i {
+      transform: translateY(-2px);
+      transition: transform .2s ease;
+  }
+
+  /* Botón central elevado (Consumos) */
+  .bottom-nav-center {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      text-decoration: none;
+      color: #9A8778;
+      font-size: var(--font-size-xs, 11px);
+      min-width: 64px;
+      gap: 2px;
+      transform: translateY(-18px);
+  }
+  .bottom-nav-center .bn-center-circle {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #9C6728, #6B4420);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      box-shadow: 0 8px 20px rgba(27, 158, 75, 0.45);
+      border: 4px solid #fff;
+      transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .bottom-nav-center:active .bn-center-circle {
+      transform: scale(0.92);
+  }
+  .bottom-nav-center.active .bn-center-circle {
+      box-shadow: 0 10px 26px rgba(27, 158, 75, 0.6);
+  }
+  .bottom-nav-center span {
+      transform: translateY(-2px);
+      font-weight: 600;
+  }
+
+  /* El "more-menu" sale con esquinas más suaves */
+  .bn-recepcion .more-menu,
+  .bn-admin .more-menu {
+      border-radius: 18px;
+      box-shadow: 0 -6px 30px rgba(62,36,18,0.18);
+  }
+
+  /* ---- AJUSTES MÓVILES PARA MÓDULOS DE ADMIN ---- */
+
+  /* Tablas anchas: scroll horizontal suave en vez de romper el layout */
+  .content-area table {
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      white-space: nowrap;
+      width: 100%;
+  }
+
+  /* Tarjetas y formularios ocupan todo el ancho cómodamente */
+  .content-area .card { border-radius: 18px; }
+  .content-area .card-body { padding: 18px; }
+  .content-area .card-header { padding: 16px 18px 12px; }
+
+  /* Formularios en columna en pantallas chicas */
+  .content-area form[style*="flex"] {
+      flex-direction: column !important;
+      align-items: stretch !important;
+  }
+  .content-area form .form-control,
+  .content-area form input[type="date"],
+  .content-area form select {
+      width: 100% !important;
+  }
+  .content-area .btn {
+      width: 100%;
+      justify-content: center;
+  }
+
+  /* El grid de métricas: 2 columnas cómodas en móvil */
+  .dashboard-metrics-grid {
+      grid-template-columns: 1fr !important;
+      gap: 12px !important;
+  }
+
+  /* Calendario: permitir scroll horizontal claro */
+  .content-area .card table[style*="min-width"] {
+      display: table; /* el calendario sí mantiene su tabla, scroll por el contenedor */
+  }
+}
+
+/* En pantallas MUY chicas, métricas a 1 columna */
+@media (max-width: 380px) {
+  .dashboard-metrics-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ── Red de seguridad: un overlay inactivo NUNCA debe capturar toques
+   ni bloquear el scroll (evita que la página se congele) ── */
+.more-overlay:not(.active),
+.bs-overlay:not(.active) {
+    display: none !important;
+    pointer-events: none !important;
+}
+
+/* ── WebView Android: separar el scroll del formulario (sheet) del
+   gesto de recargar (pull-to-refresh) y del rebote del fondo ── */
+
+/* Desactiva el pull-to-refresh y el rebote en toda la página */
+html {
+    overscroll-behavior-y: none;  /* en html: corta pull-to-refresh sin bloquear el encadenado táctil */
+}
+
+/* El cuerpo del bottom sheet hace su propio scroll, aislado del fondo:
+   al llegar arriba o abajo NO arrastra la página ni dispara recarga */
+.bs-body {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+    max-height: 70vh;
+}
+
+/* Mientras un sheet está abierto, el fondo queda totalmente quieto */
+body.bs-open {
+    overflow: hidden;
+    touch-action: none;
+}
+/* pero el sheet sí puede scrollear dentro */
+body.bs-open .bs-sheet,
+body.bs-open .bs-body {
+    touch-action: pan-y;
+}
+/* ════════ AJUSTES MÓVILES — funcionalidades nuevas ════════ */
+@media (max-width: 768px) {
+
+  /* Modales (cancelar reserva / nota interna): que no toquen los bordes */
+  .modal-overlay { padding: 16px; }
+  .confirm-card { max-height: 85vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Reportes de Ingresos: filtros apilados y cómodos al dedo */
+  .period-bar { flex-direction: column; align-items: stretch; }
+  .period-bar form { flex-direction: column; align-items: stretch; }
+  .period-bar select,
+  .period-bar input[type="month"],
+  .period-bar input[type="number"] { width: 100%; }
+  .period-bar .btn { width: 100%; justify-content: center; }
+
+  /* Gráfico de barras: etiquetas más compactas */
+  .bar-label { flex: 0 0 44px; font-size: .7rem; }
+  .bar-fill { font-size: .6rem; padding-right: 5px; }
+
+  /* Ocupación: el % arriba y el detalle debajo */
+  .ocup-top { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  /* Badge de comparativa: que no desborde la tarjeta */
+  .var-badge { font-size: .62rem; padding: 3px 8px; }
+
+  /* Chip de nota en reservas: ancho completo de su celda */
+  .nota-chip { max-width: 100%; }
+}
