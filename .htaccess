@@ -89,7 +89,7 @@ RewriteRule ^composer\.(json|lock)$ - [F,L]
 # .log  → logs/fallos.log lleva la ruta, la línea y el mensaje real de
 #         cada excepción. Servirlo es regalar el mapa del sistema.
 #         Hay además un .htaccess propio dentro de logs/.
-# .md   → CHANGELOG.md describe los hallazgos de seguridad y cómo se
+# .md   → los .md describen los hallazgos de seguridad y cómo se
 #         cerraron. Es documentación interna, no una página.
 # El servidor actual ya los bloquea por su cuenta; esto hace que la
 # protección sea del proyecto y no del hosting de turno.

@@ -24,7 +24,7 @@
 // un huésped solo se guarda QUÉ CAMPOS cambiaron, nunca su valor.
 // (Esto vale para las columnas NUEVAS. El texto libre `detalle` de los registros
 // de huéspedes —«Huésped #5: nombre apellido»— es de antes y no se tocó: queda
-// anotado en el CHANGELOG 4.0.0 como pendiente.)
+// anotado como pendiente.)
 //
 // POR QUÉ LAS ALERTAS NO GEOLOCALIZAN
 //

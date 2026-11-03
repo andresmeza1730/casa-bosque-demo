@@ -129,7 +129,7 @@ create table if not exists huespedes (
   habeas_data_fecha  datetime null,
   habeas_data_origen varchar(20) null,
   created_at         datetime default current_timestamp,
-  -- indices de rendimiento (ver CHANGELOG 1.0.2)
+  -- indices de rendimiento
   key idx_hu_created (created_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
 
@@ -161,7 +161,7 @@ create table if not exists reservas (
   key habitacion_id (habitacion_id),
   key huesped_id (huesped_id),
   key usuario_id (usuario_id),
-  -- indices de rendimiento (ver CHANGELOG 1.0.2)
+  -- indices de rendimiento
   key idx_res_estado_ent (estado, fecha_entrada),
   key idx_res_salida (fecha_salida),
   foreign key (habitacion_id) references habitaciones(id),
@@ -198,7 +198,7 @@ create table if not exists estancias (
   key huesped_id (huesped_id),
   key usuario_checkin (usuario_checkin),
   key usuario_checkout (usuario_checkout),
-  -- indices de rendimiento (ver CHANGELOG 1.0.2)
+  -- indices de rendimiento
   key idx_est_estado_out (estado, fecha_checkout),
   foreign key (reserva_id)       references reservas(id),
   foreign key (habitacion_id)    references habitaciones(id),
@@ -246,7 +246,7 @@ create table if not exists acompanantes (
   key reserva_id (reserva_id),
   key estancia_id (estancia_id),
   key docs_ok_por (docs_ok_por),
-  -- indices de rendimiento (ver CHANGELOG 1.0.2)
+  -- indices de rendimiento
   key idx_acom_menor (es_menor, reserva_id),
   foreign key (reserva_id)  references reservas(id),
   foreign key (estancia_id) references estancias(id),
@@ -279,7 +279,7 @@ create table if not exists consumos (
   key producto_id (producto_id),
   key usuario_id (usuario_id),
   key anulado_por (anulado_por),
-  -- indices de rendimiento (ver CHANGELOG 1.0.2)
+  -- indices de rendimiento
   key idx_con_est_anul (estancia_id, anulado_en),
   foreign key (estancia_id) references estancias(id),
   foreign key (producto_id) references productos(id),
@@ -410,7 +410,7 @@ create table if not exists auditoria (
   datos_despues  text null,
   created_at     datetime default current_timestamp,
   key usuario_id (usuario_id),
-  -- indices de rendimiento (ver CHANGELOG 1.0.2)
+  -- indices de rendimiento
   key idx_aud_created (created_at),
   key idx_aud_tabla_fec (tabla_afectada, created_at),
   key idx_aud_accion_fec (accion, created_at),
