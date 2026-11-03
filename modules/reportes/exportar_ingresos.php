@@ -5,7 +5,7 @@
 // ============================================================
 // Recibe los mismos parámetros que ingresos.php (vista, mes, anio)
 // y genera el desglose + el resumen por empleado en un CSV.
-// Solo administrador. Compatible con InfinityFree.
+// Solo administrador.
 // ------------------------------------------------------------
 
 require_once __DIR__ . '/../../config/database.php';

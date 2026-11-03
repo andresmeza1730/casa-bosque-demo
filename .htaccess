@@ -2,7 +2,7 @@
 # .htaccess — Casa Bosque
 # Fuerza HTTPS y aplica cabeceras de seguridad (OWASP A04 / ISO 27001)
 # ============================================================
-# InfinityFree corre sobre Apache tras un proxy: la conexión del
+# El servidor corre sobre Apache tras un proxy: la conexión del
 # cliente puede ser HTTPS aunque %{HTTPS} llegue como "off". Por eso
 # se evalúa también la cabecera X-Forwarded-Proto que envía el proxy.
 # ------------------------------------------------------------

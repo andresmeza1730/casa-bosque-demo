@@ -4,7 +4,7 @@
 // Exporta el directorio de huéspedes a CSV (abre en Excel)
 // ============================================================
 // Genera un archivo descargable con todos los huéspedes.
-// Solo administrador. Compatible con InfinityFree (sin librerías).
+// Solo administrador. Sin librerías externas.
 // ------------------------------------------------------------
 
 require_once __DIR__ . '/../../config/database.php';

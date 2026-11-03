@@ -126,7 +126,7 @@ $urlJson = BASE_URL . '/modules/auditoria/exportar.php?formato=json&' . $qs;
 /* En escritorio, la tabla; en el celular, las tarjetas. */
 /* width:0 + min-width:100%: el contenedor no aporta SU contenido al ancho mínimo de la página. Sin esto la tabla
    (1040 px a propósito) empuja a .main-content, que es un elemento flex de ancho mínimo automático, y la página
-   entera se desborda a la derecha en vez de desplazarse la tabla. El armazón no se toca (ver CLAUDE.md §4). */
+   entera se desborda a la derecha en vez de desplazarse la tabla. El armazón no se toca. */
 /* position: relative: el texto oculto de la última columna (.au-sr) es absolute, y sin esto su bloque de posición era
    la PÁGINA: quedaba fuera del contenedor, no se recortaba ni se desplazaba con la tabla y empujaba el documento entero
    (scrollWidth 1362 a 1280 px). Se vio a mano, no con las pruebas: medir solo a 375 y 1280 no lo pillaba. */

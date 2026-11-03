@@ -6,7 +6,7 @@
 // Genera un volcado .sql de todas las tablas y lo envía como
 // descarga. SOLO accesible por administradores.
 //
-// Nota: en hosting compartido (InfinityFree) no hay acceso a
+// Nota: en hosting compartido no hay acceso a
 // mysqldump por shell, así que el volcado se construye con PHP
 // recorriendo las tablas vía PDO. Apto para bases pequeñas/medianas
 // como la de un hotel. Para bases muy grandes, usar el Export de

@@ -15,7 +15,7 @@ activarCapturaDeFallos();
 // Seguridad de transporte: forzar HTTPS + HSTS (OWASP A04 / ISO 27001)
 // ============================================================
 // Complementa al .htaccess (capa Apache). Aquí se resuelve el caso del
-// proxy de InfinityFree, donde la conexión del cliente puede ser HTTPS
+// proxy del hosting, donde la conexión del cliente puede ser HTTPS
 // aunque $_SERVER['HTTPS'] llegue vacío/"off".
 
 /** ¿La conexión con el cliente es segura (HTTPS), considerando el proxy? */

@@ -62,7 +62,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="dian-note">
             <b>El módulo está preparado pero desactivado.</b> La facturación electrónica requiere:
             <ol style="margin:8px 0 0 18px;padding:0;">
-                <li>Hosting con <b>conexiones salientes</b> (InfinityFree gratuito no las permite).</li>
+                <li>Hosting con <b>conexiones salientes</b> (un hosting gratuito no las permite).</li>
                 <li>Contrato con un <b>Proveedor Tecnológico (PT)</b> autorizado por la DIAN.</li>
                 <li>Tu <b>resolución de numeración</b> de la DIAN.</li>
             </ol>

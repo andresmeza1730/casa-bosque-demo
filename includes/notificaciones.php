@@ -25,7 +25,6 @@ if (!defined('CASA_BOSQUE')) {
  * una carpeta protegida con .htaccess (Deny from all).
  *
  * Ajusta la ruta según tu servidor. Ejemplos:
- *   InfinityFree:  /home/vol.../config_privado/casabosque-firebase.json
  *   Hostinger:     /home/usuario/private/casabosque-firebase.json
  *   Local (XAMPP): C:/xampp/config_privado/casabosque-firebase.json
  */

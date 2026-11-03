@@ -7,7 +7,7 @@
 // externas) de contraseñas de un solo uso basadas en tiempo, compatible
 // con Google Authenticator, Authy, Microsoft Authenticator, etc.
 // Todo el cálculo es local: NO requiere conexiones salientes, ideal
-// para InfinityFree.
+// para un hosting compartido.
 // ------------------------------------------------------------
 
 /** Decodifica una cadena Base32 (RFC 4648) a binario. */

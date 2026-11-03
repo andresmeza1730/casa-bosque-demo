@@ -4,7 +4,7 @@
 // Configuración de Facturación Electrónica DIAN (Colombia)
 // ============================================================
 // ⚠️  DESHABILITADO por defecto. La emisión ante la DIAN requiere:
-//     1) Hosting con CONEXIONES SALIENTES (InfinityFree gratuito NO
+//     1) Hosting con CONEXIONES SALIENTES (un hosting gratuito NO
 //        las permite; usar hosting de pago o VPS).
 //     2) Contrato con un Proveedor Tecnológico (PT) AUTORIZADO por la
 //        DIAN (p. ej. Facturatech, The Factory HKA, Carvajal, Saphety…).

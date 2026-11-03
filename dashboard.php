@@ -1,5 +1,5 @@
 <?php
-// Dashboard — Panel optimizado para MySQL (phpMyAdmin / InfinityFree)
+// Dashboard — Panel optimizado para MySQL (phpMyAdmin)
 // Modelo: UN SOLO HOTEL (sin admin_id)
 $pageTitle = 'Dashboard';
 // La base ANTES de auth.php, y el orden importa: auth.php solo revalida el
