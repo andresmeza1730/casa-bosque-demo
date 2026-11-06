@@ -180,6 +180,10 @@ echo mensajesScript(mensajesDePagina(get_defined_vars()));
 <!-- Sugerencias del buscador de huéspedes. Se carga en todas las páginas pero
      no hace nada donde no hay un formulario marcado, que es casi ninguna. -->
 <script src="<?= BASE_URL ?>/assets/js/buscador-huespedes.js?v=<?= defined("APP_VERSION") ? htmlspecialchars(APP_VERSION) : "1" ?>"></script>
+<!-- El campo «escribe y elige» de Reservas, Check-in y Facturación (4.3.0): igual, no hace nada donde no hay `data-selector-busqueda`. -->
+<script src="<?= BASE_URL ?>/assets/js/selector-busqueda.js?v=<?= defined("APP_VERSION") ? htmlspecialchars(APP_VERSION) : "1" ?>"></script>
+<!-- El aviso de «este documento ya está registrado» mientras se escribe (4.3.0): igual, no hace nada donde no hay `data-verifica-documento`. -->
+<script src="<?= BASE_URL ?>/assets/js/documento-existente.js?v=<?= defined("APP_VERSION") ? htmlspecialchars(APP_VERSION) : "1" ?>"></script>
 <script>if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ navigator.serviceWorker.register('<?= BASE_URL ?>/sw.js', {scope:'<?= BASE_URL ?>/'}).catch(function(error){ console.warn('No se pudo iniciar el modo instalable:',error); }); }); }</script>
 
 <?php

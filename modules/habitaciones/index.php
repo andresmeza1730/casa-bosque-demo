@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/validacion.php';   // validarMonto, validarEntero (montos que se teclean)
 require_once __DIR__ . '/../../includes/tarifas.php';
+require_once __DIR__ . '/../../includes/fotos_habitacion.php';   // la foto de cada habitación que sube el hotel
 // Aquí se fijan las tarifas y la capacidad de TODO el hotel, y se crean y retiran
 // habitaciones. El menú (modules/menu.php, grupo «El hotel») ya la reserva al
 // administrador; con requireLogin() a secas, recepción entraba escribiendo la URL
@@ -18,7 +19,11 @@ $msgType = '';
 // Cargar tipos de habitación para los selectores de los formularios
 $tipos = $pdo->query("select id, nombre, capacidad_max, tarifa_base, tarifa_1, tarifa_2, tarifa_extra, descripcion from tipos_habitacion order by nombre")->fetchAll();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && !empty($_SERVER['CONTENT_LENGTH'])) {
+    // Una foto más grande que post_max_size llega SIN ningún campo (ni la acción ni el testigo): sin esto la pantalla recargaba muda.
+    $msg = 'La foto pesa más de lo que el servidor deja subir. Elige una más liviana (hasta 8 MB).';
+    $msgType = 'danger';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (!validateCsrf()) {
         $msg = 'Token de seguridad inválido o expirado. Intente de nuevo.';
         $msgType = 'danger';
@@ -272,6 +277,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         $antesHab, null);
                     $msg = "Habitación \"{$habData['numero']}\" removida del sistema.";
                     $msgType = 'success';
+                }
+            }
+        }
+
+        // LA FOTO DE UNA HABITACIÓN (4.3.0): la sube el hotel; ver includes/fotos_habitacion.php, que es quien la valida y la guarda.
+        if ($action === 'subir_foto' || $action === 'quitar_foto') {
+            $habId = (int) ($_POST['habitacion_id'] ?? 0);
+            $stmtF = $pdo->prepare("select numero from habitaciones where id = ?");
+            $stmtF->execute([$habId]);
+            $numeroF = $stmtF->fetchColumn();
+            if (!isAdmin()) {
+                $msg = 'Acceso restringido: solo los administradores pueden cambiar las fotos.';
+                $msgType = 'danger';
+            } elseif ($numeroF === false) {
+                $msg = 'La habitación solicitada no existe.';
+                $msgType = 'danger';
+            } elseif ($action === 'subir_foto') {
+                $res = fotoHabitacionGuardar($habId, $_FILES['foto'] ?? []);
+                $msg = $res['ok'] ? "Foto de la habitación $numeroF guardada." : $res['mensaje'];
+                $msgType = $res['ok'] ? 'success' : 'danger';
+                if ($res['ok']) registrarAuditoria($pdo, 'habitaciones', $habId, 'foto_subir', "Foto de la habitación $numeroF actualizada");
+            } else {
+                if (fotoHabitacionQuitar($habId)) {
+                    registrarAuditoria($pdo, 'habitaciones', $habId, 'foto_quitar', "Foto propia de la habitación $numeroF quitada; vuelve la de siempre");
+                    $msg = "Se quitó la foto de la habitación $numeroF: vuelve a verse la de siempre.";
+                    $msgType = 'success';
+                } else {
+                    $msg = "La habitación $numeroF no tenía una foto propia.";
+                    $msgType = 'warning';
                 }
             }
         }
@@ -667,6 +701,65 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
+<?php if ($editData): ?>
+<?php
+// La foto que se ve ahora de esta habitación: la propia, o la de siempre del tipo.
+$fotoPropia = fotoHabitacionUrl((int) $editData['id']);
+$tipoKeyE = strtolower(trim($editData['tipo_nombre'] ?? ''));
+$fotosTipoE = $fotosPorTipo[$tipoKeyE] ?? [1, 2, 3, 4, 5, 6];
+$fotoDeSiempre = BASE_URL . '/assets/habitaciones/habitacion-' . str_pad((string) $fotosTipoE[((int) $editData['id'] - 1) % count($fotosTipoE)], 2, '0', STR_PAD_LEFT) . '.webp';
+?>
+<!-- La foto de esta habitación (4.3.0): la sube el hotel. Va en su propio formulario, porque lleva un archivo. -->
+<div class="hb-card" id="hb-foto-card">
+    <div class="hb-card-h"><h3><i class="fas fa-camera" style="color:var(--cb-primary,#6B4420);"></i> Foto de la habitación <?= htmlspecialchars($editData['numero']) ?></h3></div>
+    <div class="hb-card-b">
+        <div class="hb-foto-actual"><img id="hb-foto-vista" src="<?= htmlspecialchars($fotoPropia ?? $fotoDeSiempre) ?>" alt="Foto actual de la habitación <?= htmlspecialchars($editData['numero']) ?>"></div>
+        <p class="hb-type-help"><?= $fotoPropia ? 'Esta es la foto que subió el hotel.' : 'Esta es la foto de siempre del tipo. Sube la tuya para reemplazarla.' ?> Formatos JPG, PNG o WebP, hasta 8 MB: el sistema la reduce y la guarda sola.</p>
+        <form method="POST" enctype="multipart/form-data" id="hb-foto-form">
+            <?= csrfField() ?>
+            <input type="hidden" name="action" value="subir_foto">
+            <input type="hidden" name="habitacion_id" value="<?= (int) $editData['id'] ?>">
+            <div class="hb-field">
+                <label for="hb-foto-archivo"><i class="fas fa-image"></i> Elegir foto *</label>
+                <input type="file" id="hb-foto-archivo" name="foto" class="hb-input" accept="image/jpeg,image/png,image/webp" required>
+            </div>
+            <button type="submit" class="hb-submit editar"><i class="fas fa-upload"></i> Subir foto</button>
+        </form>
+        <?php if ($fotoPropia): ?>
+        <form method="POST" style="margin-top:10px;">
+            <?= csrfField() ?>
+            <input type="hidden" name="action" value="quitar_foto">
+            <input type="hidden" name="habitacion_id" value="<?= (int) $editData['id'] ?>">
+            <button type="submit" class="hb-foto-quitar"><i class="fas fa-rotate-left"></i> Quitar mi foto y volver a la de siempre</button>
+        </form>
+        <?php endif; ?>
+    </div>
+</div>
+<style>
+.hb-foto-actual{border-radius:14px;overflow:hidden;background:#f3ede2;margin-bottom:10px;max-height:260px}
+.hb-foto-actual img{display:block;width:100%;max-height:260px;object-fit:cover}
+.hb-foto-quitar{width:100%;border:1px solid var(--cb-border,#EDE3D2);background:#fff;color:var(--cb-forest,#3E2412);font:inherit;font-weight:700;padding:11px;border-radius:12px;cursor:pointer}
+</style>
+<script>
+// Al elegir el archivo se ve cómo quedará, y se avisa de una vez si pesa de más (el servidor lo vuelve a comprobar).
+(function () {
+    var entrada = document.getElementById('hb-foto-archivo');
+    var vista = document.getElementById('hb-foto-vista');
+    if (!entrada || !vista) return;
+    entrada.addEventListener('change', function () {
+        var f = entrada.files && entrada.files[0];
+        entrada.setCustomValidity(f && f.size > 8 * 1024 * 1024 ? 'Esa foto pesa más de 8 MB. Elige una más liviana.' : '');
+        // FileReader (data:) y no createObjectURL (blob:): la política de contenido (auth.php) deja `data:` en img-src y no `blob:`.
+        if (f && f.type.indexOf('image/') === 0 && f.size <= 8 * 1024 * 1024) {
+            var lector = new FileReader();
+            lector.onload = function () { vista.src = lector.result; };
+            lector.readAsDataURL(f);
+        }
+    });
+})();
+</script>
+<?php endif; ?>
+
 <?php if (empty($habitaciones)): ?>
     <div class="hb-empty"><i class="fas fa-door-closed"></i><p>No hay habitaciones para este filtro.</p></div>
 <?php else: ?>
@@ -677,10 +770,12 @@ require_once __DIR__ . '/../../includes/header.php';
         // servidor por duplicadas. No volver a pedir .jpeg aqui.
         $fotosTipo = $fotosPorTipo[$tipoKey] ?? [1, 2, 3, 4, 5, 6];
         $fotoHabitacion = $fotosTipo[((int)$hab['id'] - 1) % count($fotosTipo)];
+        // Si el hotel subió una foto de ESTA habitación, esa; si no, la de siempre (fotos_habitacion.php).
+        $urlFoto = fotoHabitacionUrl((int) $hab['id']) ?? (BASE_URL . '/assets/habitaciones/habitacion-' . str_pad((string)$fotoHabitacion, 2, '0', STR_PAD_LEFT) . '.webp');
         ?>
         <div class="hb-room <?= $hab['estado'] ?>">
             <div class="hb-room-top">
-                <figure class="hb-room-photo"><img src="<?= BASE_URL ?>/assets/habitaciones/habitacion-<?= str_pad((string)$fotoHabitacion, 2, '0', STR_PAD_LEFT) ?>.webp" alt="Habitación tipo <?= htmlspecialchars($hab['tipo'] ?? 'disponible') ?>" loading="lazy"></figure>
+                <figure class="hb-room-photo"><img src="<?= htmlspecialchars($urlFoto) ?>" alt="Habitación tipo <?= htmlspecialchars($hab['tipo'] ?? 'disponible') ?>" loading="lazy"></figure>
                 <div class="hb-num"><b><?= htmlspecialchars($hab['numero']) ?></b><small>HAB</small></div>
                 <div class="hb-room-info">
                     <div class="hb-room-tipo"><?= htmlspecialchars($hab['tipo'] ?? '—') ?></div>

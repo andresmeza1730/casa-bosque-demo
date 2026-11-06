@@ -87,14 +87,19 @@ try {
     $stmt->execute([indiceCiego($q)]);
     $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Paso 2: si no era un documento, buscar por nombre o apellido.
+    // Paso 2: si no era un documento, buscar por nombre o apellido. Desde 4.3.0 también por el nombre COMPLETO, en los dos órdenes
+    // («Carlos Pineda» y «Pineda Carlos»): el selector de huésped de Reservas lo necesita, porque quien busca escribe nombre y apellido
+    // juntos y `nombres like` solo no lo encontraba (el apellido está en otra columna).
     if (!$filas) {
+        $comodin = '%' . $q . '%';
         $stmt = $pdo->prepare("select id, nombres, apellidos, documento_num
                                from huespedes
                                where nombres like ? or apellidos like ?
+                                  or concat_ws(' ', nombres, apellidos) like ?
+                                  or concat_ws(' ', apellidos, nombres) like ?
                                order by apellidos, nombres
                                limit " . BUSCAR_MAX_FILAS);
-        $stmt->execute(['%' . $q . '%', '%' . $q . '%']);
+        $stmt->execute([$comodin, $comodin, $comodin, $comodin]);
         $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -115,11 +120,23 @@ try {
         }
     }
 
+    // ¿Cuáles ya se han hospedado antes? El selector de huésped de Reservas lo usa para pedir (o no) el abono de la primera noche; el
+    // servidor lo vuelve a decidir al guardar, esto solo avisa en pantalla.
+    $conocidos = [];
+    if ($filas) {
+        $ids    = array_column($filas, 'id');
+        $huecos = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $pdo->prepare("select distinct huesped_id from estancias where huesped_id in ($huecos)");
+        $stmt->execute($ids);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $hid) { $conocidos[(int) $hid] = true; }
+    }
+
     $resultados = [];
     foreach ($filas as $f) {
         $id = (int) $f['id'];
         $resultados[] = [
             'id'         => $id,
+            'conocido'   => isset($conocidos[$id]),
             'nombre'     => trim($f['nombres'] . ' ' . $f['apellidos']),
             // Enmascarado a propósito: para elegir en una lista basta con los
             // últimos dígitos, y así el documento completo no viaja en cada

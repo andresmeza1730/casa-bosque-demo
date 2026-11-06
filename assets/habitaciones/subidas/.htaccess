@@ -1,0 +1,8 @@
+# Aquí solo hay las fotos de las habitaciones que sube el hotel (WebP con nombre fijo). Nada de esto se ejecuta.
+# Dos capas, como en el resto del proyecto: mod_rewrite no hereda del .htaccess de arriba y LiteSpeed ignora `Require all denied`.
+Options -Indexes
+RewriteEngine On
+RewriteRule \.(php[0-9]?|phtml|phar|pl|py|cgi|sh|html?|js|svg)$ - [F,L]
+<FilesMatch "\.(php[0-9]?|phtml|phar|pl|py|cgi|sh)$">
+    Require all denied
+</FilesMatch>

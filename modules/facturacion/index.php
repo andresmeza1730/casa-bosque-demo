@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/cifrado.php';
 require_once __DIR__ . '/../../includes/validacion.php';   // validarTelefono, validarDocumentoTipo
+require_once __DIR__ . '/../../includes/selector_busqueda.php';   // el campo «escribe y elige» de la cuenta cerrada
 requireAdmin();
 
 $pdo = getDB();
@@ -160,13 +161,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'emiti
     }
 }
 
-// Pendientes: cuentas cerradas SIN factura vigente. Una cuenta cuya
-// factura se anuló vuelve a aparecer aquí, que es justo lo que se busca.
-$pendientes = $pdo->query("select e.id, e.fecha_checkout, e.total_pagar, h.numero habitacion, hu.nombres, hu.apellidos
-    from estancias e join habitaciones h on h.id=e.habitacion_id join huespedes hu on hu.id=e.huesped_id
-    where e.estado='cerrada'
-      and not exists (select 1 from facturas f where f.estancia_id = e.id and f.estado = 'emitida')
-    order by e.fecha_checkout desc limit 200")->fetchAll();
+// Las cuentas pendientes (cerradas SIN factura vigente) ya no se cargan aquí en un menú de 200: el campo de «Cuenta cerrada» las busca
+// mientras se escribe (modules/facturacion/buscar.php, 4.3.0). Una cuenta cuya factura se anuló vuelve a aparecer allí, que es justo lo que se busca.
 
 // Las anuladas siguen en la lista, marcadas: no se ocultan ni se borran.
 $emitidas = $pdo->query("select f.id factura_id, f.numero, f.tipo_receptor, f.razon_social, f.total, f.emitida_en,
@@ -193,14 +189,23 @@ $seleccion = (int)($_GET['estancia'] ?? 0);
 $receptor = ['documento_tipo' => 'CC', 'documento_num' => '', 'nombres' => '',
              'apellidos' => '', 'telefono' => '', 'correo' => ''];
 
+$cuentaElegida = null;   // lo que el campo de «Cuenta cerrada» muestra ya elegido al recargar con ?estancia=
+
 if ($seleccion > 0) {
     $stmtR = $pdo->prepare("select hu.documento_tipo, hu.documento_num, hu.nombres,
-                                   hu.apellidos, hu.telefono, hu.email
+                                   hu.apellidos, hu.telefono, hu.email,
+                                   h.numero habitacion, e.fecha_checkout, e.total_pagar
                             from estancias e
                             join huespedes hu on hu.id = e.huesped_id
-                            where e.id = ?");
+                            join habitaciones h on h.id = e.habitacion_id
+                            where e.id = ?
+                              and e.estado = 'cerrada'
+                              and not exists (select 1 from facturas f where f.estancia_id = e.id and f.estado = 'emitida')");
     $stmtR->execute([$seleccion]);
     if ($datosR = $stmtR->fetch(PDO::FETCH_ASSOC)) {
+        $cuentaElegida = ['id' => $seleccion, 'titulo' => trim($datosR['nombres'] . ' ' . $datosR['apellidos']),
+                          'detalle' => 'Hab. ' . $datosR['habitacion'] . ' · Cuenta #' . $seleccion . ' · salida ' . date('d/m/Y', strtotime((string) $datosR['fecha_checkout']))
+                                       . ' · $' . number_format((float) $datosR['total_pagar'], 0, ',', '.')];
         // El tipo solo se preselecciona si existe entre las opciones del
         // formulario: `huespedes` admite NIT, que aquí no es una de ellas.
         $tipo = (string) $datosR['documento_tipo'];
@@ -256,8 +261,11 @@ require_once __DIR__ . '/../../includes/header.php';
         <form method="POST" id="fc-form">
             <?= csrfField() ?><input type="hidden" name="action" value="emitir">
             <div class="fc-grid">
-                <div class="fc-field fc-span"><label for="estancia_id">Cuenta cerrada *</label><?php /* Al cambiar de cuenta se recarga con ?estancia=, que es lo que trae
-         los datos del huésped nuevo. */ ?><select id="estancia_id" name="estancia_id" required onchange="if(this.value) location.search='?estancia='+encodeURIComponent(this.value);"><option value="">Selecciona una cuenta sin facturar...</option><?php foreach($pendientes as $p): ?><option value="<?= (int)$p['id'] ?>" <?= $seleccion===(int)$p['id']?'selected':'' ?>>Estancia #<?= (int)$p['id'] ?> · Hab. <?= htmlspecialchars($p['habitacion']) ?> · <?= htmlspecialchars($p['nombres'].' '.$p['apellidos']) ?> · <?= date('d/m/Y',strtotime($p['fecha_checkout'])) ?> · $<?= number_format($p['total_pagar'],0,',','.') ?></option><?php endforeach; ?></select></div>
+                <div class="fc-field fc-span"><label for="cuenta_buscar">Cuenta cerrada *</label><?php /* 4.3.0: se escribe el nombre, la cédula completa, la habitación o el número de la cuenta y se elige; antes era un menú con
+         las últimas 200. Al elegir se recarga con ?estancia=, que es lo que trae los datos del huésped nuevo. */
+         selectorBusqueda(['nombre' => 'estancia_id', 'url' => BASE_URL . '/modules/facturacion/buscar.php', 'minimo' => 0, 'modo' => 'recargar', 'param' => 'estancia',
+                           'requerido' => true, 'idCampo' => 'cuenta_buscar', 'inicial' => $cuentaElegida, 'etiqueta' => 'Buscar la cuenta cerrada por nombre, cédula, habitación o número',
+                           'ayuda' => 'Nombre, cédula completa, habitación o número de cuenta…']); ?></div>
                 <div class="fc-field fc-span"><label>Tipo de receptor *</label><div class="fc-toggle"><label><input type="radio" name="tipo_receptor" value="natural" checked> Persona natural</label><label><input type="radio" name="tipo_receptor" value="juridica"> Persona jurídica</label></div></div>
                 <div class="fc-field natural"><label>Tipo de documento *</label><select name="documento_tipo"><?php foreach (['CC'=>'Cédula de ciudadanía','CE'=>'Cédula de extranjería','TI'=>'Tarjeta de identidad','RC'=>'Registro civil','PAS'=>'Pasaporte'] as $k=>$etiquetaDoc): ?><option value="<?= $k ?>"<?= $receptor['documento_tipo']===$k?' selected':'' ?>><?= $etiquetaDoc ?></option><?php endforeach; ?></select></div>
                 <div class="fc-field natural"><label>Número de documento *</label><input name="documento_num" maxlength="30" autocomplete="off" inputmode="numeric" data-solo="documento" data-tipo-en="documento_tipo" value="<?= htmlspecialchars($receptor['documento_num']) ?>"></div>

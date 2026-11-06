@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../includes/cifrado.php';
 require_once __DIR__ . '/../../includes/disponibilidad.php';
 require_once __DIR__ . '/../../includes/tarifas.php';        // el precio lo manda el tipo
 require_once __DIR__ . '/../../includes/validacion.php';     // validarMonto: el abono es un entero de pesos
+require_once __DIR__ . '/../../includes/selector_busqueda.php';   // el campo «escribe y elige» del huésped titular
 requireLogin();
 
 $pdo = getDB();
@@ -318,7 +319,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Las tres tarifas viajan a los selectores para calcular el precio al vuelo.
 // `capacidad_max` sale por SQL_CAPACIDAD para que el «sin tope» llegue
 // traducido y no como el 0 crudo de la base.
-$habitaciones = $pdo->query("select h.id, h.numero, t.nombre as tipo,
+$habitaciones = $pdo->query("select h.id, h.numero, h.notas, t.nombre as tipo,
                                     " . SQL_CAPACIDAD . " as capacidad_max,
                                     t.tarifa_1, t.tarifa_2, t.tarifa_extra, t.tarifa_base,
                                     " . SQL_TARIFA . " as tarifa_desde
@@ -335,12 +336,10 @@ function rsDatosTarifa(array $hab): string
          . ' data-tarifa2="' . ($hab['tarifa_2'] !== null ? (int)$hab['tarifa_2'] : '') . '"'
          . ' data-extra="' . (int)($hab['tarifa_extra'] ?? 0) . '"'
          . ' data-tarifa-base="' . ($hab['tarifa_base'] !== null ? (int)$hab['tarifa_base'] : '') . '"'
-         . ' data-cap="' . (int)$hab['capacidad_max'] . '"';
+         . ' data-cap="' . (int)$hab['capacidad_max'] . '"'
+         . ' data-notas="' . htmlspecialchars((string) ($hab['notas'] ?? ''), ENT_QUOTES) . '"';   // lo que el hotel anotó de la habitación (4.3.0): ventilador, aire acondicionado…
 }
 
-$huespedes = $pdo->query("select h.id, h.documento_num, h.nombres, h.apellidos, (select count(*) from estancias e where e.huesped_id=h.id) visitas_previas from huespedes h order by h.apellidos")->fetchAll();
-foreach ($huespedes as &$_hg) { $_hg['documento_num'] = descifrar($_hg['documento_num']); }
-unset($_hg);
 
 // Listado de reservas
 $filtro = $_GET['filtro'] ?? 'activas';
@@ -477,6 +476,11 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 <?php endif; ?>
 
+<style>
+.rs-notas-hab{margin-top:8px;padding:9px 12px;border:1px solid #E6C37A;border-radius:10px;background:#FFF7E6;color:#6B4420;font-size:.84rem;line-height:1.4;white-space:pre-line}
+.rs-notas-hab[hidden]{display:none}
+.rs-notas-hab i{margin-right:4px;color:#B7791F}
+</style>
 <!-- Nueva reserva -->
 <div class="rs-card">
     <div class="rs-card-h"><h3><i class="fas fa-calendar-plus" style="color:var(--cb-primary,#6B4420);"></i> Nueva reserva</h3></div>
@@ -486,13 +490,13 @@ require_once __DIR__ . '/../../includes/header.php';
             <input type="hidden" name="action" value="crear">
 
             <div class="rs-field">
-                <label><i class="fas fa-user"></i> Huésped titular *</label>
-                <select name="huesped_id" id="huesped_id" class="rs-select" required>
-                    <option value="">Seleccionar huésped...</option>
-                    <?php foreach ($huespedes as $h): ?>
-                        <option value="<?= $h['id'] ?>" data-conocido="<?= (int)$h['visitas_previas'] > 0 ? '1' : '0' ?>"><?= htmlspecialchars($h['apellidos'] . ', ' . $h['nombres'] . ' (' . $h['documento_num'] . ')') ?></option>
-                    <?php endforeach; ?>
-                </select>
+                <label for="huesped_buscar"><i class="fas fa-user"></i> Huésped titular *</label>
+                <?php /* 4.3.0: un campo donde se escribe el nombre o la cédula y se elige, en vez de un menú con TODOS los huéspedes (con cien clientes
+                         ya era una lista larguísima, y llevaba el documento de cada uno en la página). Ver includes/selector_busqueda.php. */
+                selectorBusqueda([
+                    'nombre' => 'huesped_id', 'url' => BASE_URL . '/modules/huespedes/buscar.php', 'minimo' => 2, 'requerido' => true,
+                    'etiqueta' => 'Buscar huésped por nombre o cédula', 'ayuda' => 'Escribe el nombre o la cédula completa…', 'claseCampo' => 'rs-input', 'idCampo' => 'huesped_buscar',
+                ]); ?>
                 <a href="<?= BASE_URL ?>/modules/huespedes/index.php" class="rs-newlink"><i class="fas fa-plus-circle"></i> Registrar nuevo huésped</a>
             </div>
 
@@ -504,6 +508,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         <option value="<?= $hab['id'] ?>"<?= rsDatosTarifa($hab) ?>>Hab. <?= htmlspecialchars($hab['numero'] . ' — ' . $hab['tipo'] . ' (' . textoCapacidad((int)$hab['capacidad_max']) . ')') ?></option>
                     <?php endforeach; ?>
                 </select>
+                <?php /* Las notas de la habitación elegida (4.3.0): no todas tienen aire acondicionado, unas tienen ventilador. Las pone rsPintarNotas(). */ ?>
+                <div class="rs-notas-hab" id="rs-notas-hab" hidden><i class="fas fa-sticky-note"></i> <span id="rs-notas-hab-txt"></span></div>
             </div>
 
             <div class="rs-row2">
@@ -745,6 +751,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <option value="<?= $hab['id'] ?>"<?= rsDatosTarifa($hab) ?>>Hab. <?= htmlspecialchars($hab['numero'] . ' — ' . $hab['tipo'] . ' (' . textoCapacidad((int)$hab['capacidad_max']) . ')') ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <div class="rs-notas-hab" id="rs-edit-notas-hab" hidden><i class="fas fa-sticky-note"></i> <span id="rs-edit-notas-hab-txt"></span></div>
                 </div>
                 <div class="rs-row2">
                     <div class="rs-field">
@@ -853,7 +860,16 @@ function rsPaxActual() {
     return parseInt(sel.value, 10) || 0;
 }
 
+// Las notas de la habitación elegida (ventilador o aire acondicionado, lo que el hotel anotó): se escriben como TEXTO, nunca como HTML.
+function rsPintarNotas(select, caja, texto) {
+    const opcion = select.options[select.selectedIndex];
+    const notas = (opcion && opcion.value) ? (opcion.dataset.notas || '').trim() : '';
+    texto.textContent = notas;
+    caja.hidden = notas === '';
+}
+
 function rsHabitacionCambiada() {
+    rsPintarNotas(roomSelect, document.getElementById('rs-notas-hab'), document.getElementById('rs-notas-hab-txt'));
     const tipo = CBTarifas.desdeSelect(roomSelect);
     const sel  = document.getElementById('num_personas');
     const mas  = document.getElementById('num_personas_mas');
@@ -905,6 +921,7 @@ function rsPintarPrecio() {
 // ── El mismo control, en el modal de edición ──
 function rsEditHabitacionCambiada(paxDeseado) {
     const sel  = document.getElementById('edit-habitacion');
+    rsPintarNotas(sel, document.getElementById('rs-edit-notas-hab'), document.getElementById('rs-edit-notas-hab-txt'));
     const pax  = document.getElementById('edit-personas');
     const mas  = document.getElementById('edit-personas-mas');
     const tipo = CBTarifas.desdeSelect(sel);
@@ -957,9 +974,9 @@ const depositInput = document.getElementById('abono_reserva');
 const depositMethod = document.getElementById('metodo_abono');
 const depositHint = document.getElementById('abono-ayuda');
 function actualizarAbonoReserva() {
-    const guest = guestSelect.options[guestSelect.selectedIndex];
     const room = roomSelect.options[roomSelect.selectedIndex];
-    const nuevo = guest && guest.value && guest.dataset.conocido === '0';
+    // `guestSelect` es el campo oculto del selector de huésped (4.3.0): trae el id elegido y, en data-conocido, si ya se había hospedado.
+    const nuevo = guestSelect.value !== '' && guestSelect.dataset.conocido === '0';
     const tarifa = (room && room.value)
         ? (CBTarifas.porPersonas(CBTarifas.desdeSelect(roomSelect), rsPaxActual()) || 0)
         : 0;

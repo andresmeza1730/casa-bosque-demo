@@ -363,7 +363,7 @@ $huPrev = function (string $campo, string $porDefecto = '') use ($huConservar): 
                 </div>
                 <div class="hu-field">
                     <label><i class="fas fa-hashtag"></i> N° Documento</label>
-                    <input type="text" name="documento_num" class="hu-input" required maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="documento_tipo" placeholder="1234567890" value="<?= htmlspecialchars($editData['documento_num'] ?? $huPrev('documento_num')) ?>" <?= $editData ? 'readonly' : '' ?>>
+                    <input type="text" name="documento_num" class="hu-input" required maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="documento_tipo" <?= $editData ? '' : 'data-verifica-documento="' . BASE_URL . '/modules/huespedes/existe.php" data-ficha-url="' . BASE_URL . '/modules/huespedes/ficha.php" data-bloquea="1"' ?> placeholder="1234567890" value="<?= htmlspecialchars($editData['documento_num'] ?? $huPrev('documento_num')) ?>" <?= $editData ? 'readonly' : '' ?>>
                 </div>
             </div>
 

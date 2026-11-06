@@ -124,3 +124,19 @@ body.cb-avisos :is(.ci-msg, .co-msg, .cs-msg, .hb-msg, .hu-msg, .rs-msg, .us-msg
     color: var(--danger, #B3261E);
 }
 @media (prefers-reduced-motion: reduce) { .cb-falta { animation: none; } }
+
+/* ── El aviso «este documento ya está registrado» (4.3.0, assets/js/documento-existente.js) ──
+   Debajo del campo del documento; ámbar de la marca, sin negro, y sin saltar la pantalla: es un aviso, no un error del formulario. */
+.de-aviso {
+    margin-top: 6px;
+    padding: 9px 12px;
+    border: 1px solid #E6C37A;
+    border-radius: 10px;
+    background: #FFF7E6;
+    color: #6B4420;
+    font-size: .82rem;
+    line-height: 1.4;
+}
+.de-aviso[hidden] { display: none; }
+.de-aviso i { margin-right: 4px; color: #B7791F; }
+.de-aviso a { color: #6B4420; font-weight: 700; text-decoration: underline; white-space: nowrap; }

@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../includes/validacion.php';
 require_once __DIR__ . '/../../includes/cifrado.php';
 require_once __DIR__ . '/../../includes/tarifas.php';   // el precio lo manda el tipo
 require_once __DIR__ . '/../../includes/disponibilidad.php';   // bloquearHabitacion()
+require_once __DIR__ . '/../../includes/selector_busqueda.php';   // «Ya registrado»: el campo donde se escribe y se elige
 requireLogin();
 
 $pdo = getDB();
@@ -331,7 +332,6 @@ $habDisponibles = $pdo->query("select h.id, h.numero, t.nombre as tipo,
                                from habitaciones h, tipos_habitacion t
                                where h.tipo_id = t.id and h.estado = 'disponible'
                                order by cast(h.numero as unsigned), h.numero")->fetchAll();
-$huespedes = $pdo->query("select id, documento_num, nombres, apellidos from huespedes order by apellidos")->fetchAll();
 $estanciasActivas = $pdo->query("select e.id, e.fecha_checkin, e.tarifa_noche, h.numero, hu.nombres, hu.apellidos from estancias e, habitaciones h, huespedes hu where e.habitacion_id = h.id and e.huesped_id = hu.id and e.estado = 'activa' order by e.fecha_checkin desc")->fetchAll();
 
 /**
@@ -370,6 +370,17 @@ $ciPrev = function (string $campo) use ($ciConservar): string {
     return $ciConservar && is_string($_POST[$campo] ?? null) ? $_POST[$campo] : '';
 };
 $ciModoInicial = ($ciPrev('huesped_modo') === 'existente') ? 'existente' : 'nuevo';
+
+// «Ya registrado» ya no es un menú con TODOS los huéspedes y sus documentos (4.3.0): es un campo donde se escribe y se elige
+// (includes/selector_busqueda.php). Si el ingreso falló estando en «Ya registrado», vuelve elegido el mismo huésped.
+$ciHuespedElegido = null;
+if ((int) $ciPrev('huesped_id') > 0) {
+    $stmtHe = $pdo->prepare("select id, nombres, apellidos, documento_num from huespedes where id = ?");
+    $stmtHe->execute([(int) $ciPrev('huesped_id')]);
+    if ($he = $stmtHe->fetch(PDO::FETCH_ASSOC)) {
+        $ciHuespedElegido = ['id' => (int) $he['id'], 'titulo' => trim($he['nombres'] . ' ' . $he['apellidos']), 'detalle' => documentoOculto((string) descifrar($he['documento_num']))];
+    }
+}
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -602,7 +613,7 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <option value="<?= $tipoDoc ?>" <?= $ciPrev('n_documento_tipo') === $tipoDoc ? 'selected' : '' ?>><?= $tipoDoc ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <input type="text" name="n_documento_num" class="ci-input" data-req maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="n_documento_tipo" placeholder="N° de documento" autocomplete="off" value="<?= htmlspecialchars($ciPrev('n_documento_num')) ?>">
+                        <input type="text" name="n_documento_num" class="ci-input" data-req maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="n_documento_tipo" data-verifica-documento="<?= BASE_URL ?>/modules/huespedes/existe.php" data-ficha-url="<?= BASE_URL ?>/modules/huespedes/ficha.php" data-aviso-extra="Al registrar la entrada se usará ese huésped." placeholder="N° de documento" autocomplete="off" value="<?= htmlspecialchars($ciPrev('n_documento_num')) ?>">
                     </div>
                     <div class="ci-row2">
                         <input type="text" name="n_nombres" class="ci-input" data-req maxlength="100" placeholder="Nombres" autocomplete="off" value="<?= htmlspecialchars($ciPrev('n_nombres')) ?>">
@@ -623,12 +634,9 @@ require_once __DIR__ . '/../../includes/header.php';
 
                 <!-- Ya registrado: elegir de la lista -->
                 <div id="ci-existente" style="display:none;">
-                    <select name="huesped_id" id="huesped_ci" class="ci-select">
-                        <option value="">Seleccionar huésped...</option>
-                        <?php foreach($huespedes as $h): ?>
-                            <option value="<?= $h['id'] ?>" <?= ($ciPrev('huesped_id') !== '' && $ciPrev('huesped_id') === (string) $h['id']) ? 'selected' : '' ?>><?= htmlspecialchars($h['apellidos'] . ', ' . $h['nombres'] . ' (' . descifrar($h['documento_num']) . ')') ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <?php selectorBusqueda(['nombre' => 'huesped_id', 'id' => 'huesped_ci', 'url' => BASE_URL . '/modules/huespedes/buscar.php', 'minimo' => 2,
+                                            'requerido' => false, 'inicial' => $ciHuespedElegido, 'claseCampo' => 'ci-input',
+                                            'etiqueta' => 'Buscar huésped por nombre o cédula', 'ayuda' => 'Escribe el nombre o la cédula completa…']); ?>
                 </div>
             </div>
 
@@ -769,7 +777,13 @@ require_once __DIR__ . '/../../includes/header.php';
             document.getElementById('ci-existente').style.display = (m === 'existente') ? 'block' : 'none';
             // required solo en los campos visibles (evita bloquear el envío)
             document.querySelectorAll('#ci-nuevo [data-req]').forEach(function(el){ el.required = (m === 'nuevo'); });
-            var sel = document.getElementById('huesped_ci'); if (sel) sel.required = (m === 'existente');
+            // El campo de «Ya registrado» (selector_busqueda) solo es obligatorio cuando se ve; se le avisa para que lo revalide.
+            var cajaEx = document.querySelector('#ci-existente [data-selector-busqueda]');
+            if (cajaEx) {
+                var campoEx = cajaEx.querySelector('.sb-campo');
+                campoEx.setAttribute('data-requerido', m === 'existente' ? '1' : '0');
+                cajaEx.dispatchEvent(new Event('sb:revalidar'));
+            }
             document.getElementById('tab-nu').classList.toggle('on', m === 'nuevo');
             document.getElementById('tab-ex').classList.toggle('on', m === 'existente');
         }
