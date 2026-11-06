@@ -120,6 +120,21 @@ function validarMonto(mixed $valor, int $min = 1): ?int {
     return validarEntero($valor, $min, MONTO_MAX);
 }
 
+// ── Fechas que se teclean o llegan de un formulario (4.3.1) ─────────────────
+// Reservas comparaba las fechas como TEXTO (`$entrada >= $salida`): «abc» o «2026-02-31» pasaban la comparación y reventaban —o se
+// guardaban como otra fecha— más abajo. Esta es la única forma de leer una fecha de un formulario: devuelve «Y-m-d» o null.
+/** Una fecha real en formato año-mes-día («2026-11-06»), o null. «2026-02-31» y «abc» se rechazan: no se «corrigen». */
+function validarFecha(mixed $valor): ?string {
+    if (!is_string($valor)) return null;
+    $t = trim($valor);
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $t) !== 1) return null;
+    $d = DateTime::createFromFormat('!Y-m-d', $t);
+    $err = DateTime::getLastErrors();
+    if (!$d || $d->format('Y-m-d') !== $t) return null;                         // 2026-02-31 se «rueda» a marzo: no es esa fecha
+    if ($err && ($err['warning_count'] > 0 || $err['error_count'] > 0)) return null;
+    return $t;
+}
+
 // ── Documento según su tipo (4.2.3) ─────────────────────────────────────────
 // Hasta 4.2.2 el documento de un huésped se guardaba tal cual lo tecleaban: una cédula con letras salía igual que una
 // con dígitos. Esta es la forma de leer un documento de un formulario: devuelve el número normalizado o null, y quien llama

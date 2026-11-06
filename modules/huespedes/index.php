@@ -16,6 +16,15 @@ $pdo = getDB();
 $msg = '';
 $msgType = '';
 
+/** ¿Se puede editar a este huésped? 'ok', 'no_existe' o 'anonimizado' (borrado seguro: ya no se le escribe nada). */
+function huespedParaEditar(PDO $pdo, int $id): string {
+    $st = $pdo->prepare("select anonimizado_en from huespedes where id = ?");
+    $st->execute([$id]);
+    $fila = $st->fetch(PDO::FETCH_ASSOC);
+    if ($fila === false) return 'no_existe';
+    return $fila['anonimizado_en'] === null ? 'ok' : 'anonimizado';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateCsrf()) {
         $msg = 'Token de seguridad inválido. Intente de nuevo.';
@@ -97,6 +106,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($id > 0 && $telNorm === null) {
                 $msg = 'El teléfono no es válido: solo números (mínimo 7), y puede llevar +, - y paréntesis. No se guardó nada.';
                 $msgType = 'danger';
+            } elseif ($id > 0 && ($estadoHu = huespedParaEditar($pdo, $id)) !== 'ok') {
+                // 4.3.1: ni uno que no existe ni uno ANONIMIZADO. Antes el servidor no miraba (la interfaz solo escondía el lápiz) y quien mandara
+                // el POST a mano le reescribía el teléfono y el correo a alguien cuyos datos personales ya se habían suprimido: lo contrario del
+                // borrado seguro (Ley 1581, derecho de supresión).
+                $msg = $estadoHu === 'anonimizado'
+                    ? 'Ese huésped fue anonimizado (borrado seguro): sus datos personales ya no se pueden editar. No se guardó nada.'
+                    : 'El huésped no existe. No se guardó nada.';
+                $msgType = 'danger';
             } elseif ($id > 0) {
                 $telefono = $telNorm;
                 // De un huésped la auditoría guarda QUÉ campos cambiaron, nunca sus
@@ -110,11 +127,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ['telefono' => (string) descifrar($previo['telefono'] ?? null), 'email' => (string) ($previo['email'] ?? ''), 'ciudad_origen' => (string) ($previo['ciudad_origen'] ?? '')],
                     ['telefono' => $telefono, 'email' => $email, 'ciudad_origen' => $ciudad]
                 );
-                $stmt = $pdo->prepare("update huespedes set telefono = ?, email = ?, ciudad_origen = ? where id = ?");
+                // `anonimizado_en is null` también en el `where`: si lo anonimizaron entre la lectura y este update, no se escribe nada.
+                $stmt = $pdo->prepare("update huespedes set telefono = ?, email = ?, ciudad_origen = ? where id = ? and anonimizado_en is null");
                 $stmt->execute([cifrar($telefono), $email, $ciudad, $id]);
-                registrarAuditoria($pdo, 'huespedes', $id, 'editar', "Datos de contacto actualizados", null, $camposCambiados);
-                $msg = 'Datos del huésped actualizados correctamente.';
-                $msgType = 'success';
+                if ($stmt->rowCount() === 0 && huespedParaEditar($pdo, $id) !== 'ok') {
+                    $msg = 'Ese huésped fue anonimizado mientras se editaba: no se guardó nada.';
+                    $msgType = 'danger';
+                } else {
+                    registrarAuditoria($pdo, 'huespedes', $id, 'editar', "Datos de contacto actualizados", null, $camposCambiados);
+                    $msg = 'Datos del huésped actualizados correctamente.';
+                    $msgType = 'success';
+                }
             }
         }
 
@@ -233,7 +256,12 @@ if ($editId > 0) {
     $stmtEdit = $pdo->prepare("select * from huespedes where id = ?");
     $stmtEdit->execute([$editId]);
     $editData = $stmtEdit->fetch(PDO::FETCH_ASSOC);
-    if ($editData) {
+    if ($editData && $editData['anonimizado_en'] !== null) {
+        // Un anonimizado no se abre para editar (4.3.1): el formulario le dejaba escribir un teléfono y un correo nuevos.
+        $editData = null;
+        $msg = 'Ese huésped fue anonimizado (borrado seguro): sus datos personales ya no se pueden editar.';
+        $msgType = 'warning';
+    } elseif ($editData) {
         $editData['documento_num'] = descifrar($editData['documento_num']);
         $editData['telefono']      = descifrar($editData['telefono']);
     }

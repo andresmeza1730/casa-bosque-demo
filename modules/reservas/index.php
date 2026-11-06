@@ -25,8 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'crear') {
             $habitacionId = (int)$_POST['habitacion_id'];
             $huespedId    = (int)$_POST['huesped_id'];
-            $fechaEntrada = $_POST['fecha_entrada'];
-            $fechaSalida  = $_POST['fecha_salida'];
+            $fechaEntrada = validarFecha($_POST['fecha_entrada'] ?? '');   // 4.3.1: una fecha real o null (antes se comparaba como texto)
+            $fechaSalida  = validarFecha($_POST['fecha_salida'] ?? '');
             $numPersonas  = (int)$_POST['num_personas'];
             $horaLlegada  = trim($_POST['hora_llegada'] ?? '');
             $horaVal      = preg_match('/^\d{2}:\d{2}$/', $horaLlegada) ? $horaLlegada : null;
@@ -39,6 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Validar fechas
             if ($abonoReserva === null) {
                 $msg = 'El abono debe ser un número entero de pesos (0 si no hay), sin letras ni decimales.';
+                $msgType = 'danger';
+            } elseif ($fechaEntrada === null || $fechaSalida === null) {
+                $msg = 'Las fechas de entrada y de salida deben ser fechas válidas (año-mes-día).';
                 $msgType = 'danger';
             } elseif ($fechaEntrada >= $fechaSalida) {
                 $msg = 'La fecha de salida debe ser posterior a la de entrada.';
@@ -255,60 +258,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // ── Editar una reserva confirmada (habitación, fechas, hora, personas) ──
+        // 4.3.1: con transacción y bloqueo, como crear. Antes se leía el estado y la disponibilidad y se escribía DESPUÉS, sin bloquear nada: entre
+        // una cosa y otra cabía otra reserva en la misma habitación (la carrera que 3.0.5 cerró para `crear`), o un check-in que ya había cerrado
+        // la reserva. Y las fechas se comparaban como texto: «abc» pasaba, y una entrada en el pasado se aceptaba. Ahora, en este orden:
+        //   fechas válidas → beginTransaction → reserva bloqueada y revalidada → habitación bloqueada → disponibilidad → update con el estado
+        //   esperado en el `where` y rowCount → commit. Ver includes/disponibilidad.php.
         if ($action === 'editar') {
-            $reservaId    = (int)$_POST['reserva_id'];
-            $habitacionId = (int)$_POST['habitacion_id'];
-            $fechaEntrada = $_POST['fecha_entrada'] ?? '';
-            $fechaSalida  = $_POST['fecha_salida'] ?? '';
-            $numPersonas  = (int)$_POST['num_personas'];
+            $reservaId    = (int)($_POST['reserva_id'] ?? 0);
+            $habitacionId = (int)($_POST['habitacion_id'] ?? 0);
+            $fechaEntrada = validarFecha($_POST['fecha_entrada'] ?? '');
+            $fechaSalida  = validarFecha($_POST['fecha_salida'] ?? '');
+            $numPersonas  = (int)($_POST['num_personas'] ?? 0);
             $horaLlegada  = trim($_POST['hora_llegada'] ?? '');
             $horaVal      = preg_match('/^\d{2}:\d{2}$/', $horaLlegada) ? $horaLlegada : null;
+            $hoyEditar    = date('Y-m-d');
 
-            // Solo se modifican reservas CONFIRMADAS (sin check-in ni canceladas)
-            $stmtEst = $pdo->prepare("select estado from reservas where id = ?");
-            $stmtEst->execute([$reservaId]);
-            $estadoActual = $stmtEst->fetchColumn();
-
-            if ($estadoActual === false) {
-                $msg = 'La reserva no existe.'; $msgType = 'danger';
-            } elseif ($estadoActual !== 'confirmada') {
-                $msg = 'Solo se pueden modificar reservas confirmadas (sin check-in).'; $msgType = 'danger';
+            if ($fechaEntrada === null || $fechaSalida === null) {
+                $msg = 'Las fechas de entrada y de salida deben ser fechas válidas (año-mes-día).'; $msgType = 'danger';
             } elseif ($fechaEntrada >= $fechaSalida) {
                 $msg = 'La fecha de salida debe ser posterior a la de entrada.'; $msgType = 'danger';
-            } elseif ($fechaSalida < date('Y-m-d')) {
-                $msg = 'La fecha de salida no puede ser una fecha pasada.'; $msgType = 'danger';
+            } elseif ($fechaSalida <= $hoyEditar) {
+                $msg = 'La fecha de salida no puede ser hoy ni una fecha pasada.'; $msgType = 'danger';
             } else {
-                $stmtCap = $pdo->prepare("select " . SQL_CAPACIDAD . " as capacidad_max,
-                                                 t.nombre, t.tarifa_1, t.tarifa_2, t.tarifa_extra, t.tarifa_base
-                                          from habitaciones h
-                                          left join tipos_habitacion t on t.id = h.tipo_id
-                                          where h.id = ?");
-                $stmtCap->execute([$habitacionId]);
-                $roomEdit = $stmtCap->fetch(PDO::FETCH_ASSOC);
+                // Cualquier salida de la transacción con un mensaje: deshace lo hecho y lo dice.
+                $fallarEditar = function (string $texto) use ($pdo, &$msg, &$msgType): void {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    $msg = $texto; $msgType = 'danger';
+                };
+                try {
+                    $pdo->beginTransaction();
 
-                if (!$roomEdit) {
-                    $msg = 'La habitación seleccionada no existe.'; $msgType = 'danger';
-                } elseif (($motivoOcupacion = motivoOcupacionInvalida($roomEdit, $numPersonas)) !== null) {
-                    $msg = $motivoOcupacion; $msgType = 'danger';
-                } else {
-                    // La misma comprobación que al crear, excluyendo esta reserva
-                    // para que no choque consigo misma. Antes aquí solo se miraba el
-                    // solape: se podía mover una reserva a una habitación en
-                    // limpieza o ya ocupada.
-                    $reservable = habitacionReservable($pdo, $habitacionId, $fechaEntrada, $fechaSalida, $reservaId);
+                    // La reserva, bloqueada y leída DESPUÉS del bloqueo: solo se modifican las CONFIRMADAS (sin check-in ni canceladas).
+                    $stmtEst = $pdo->prepare("select estado, fecha_entrada from reservas where id = ? for update");
+                    $stmtEst->execute([$reservaId]);
+                    $actual = $stmtEst->fetch(PDO::FETCH_ASSOC);
 
-                    if (!$reservable['ok']) {
-                        $msg = trim($reservable['mensaje'] . ' ' . disponibilidadTextoLibres($reservable['libres']));
-                        $msgType = 'danger';
+                    if ($actual === false) {
+                        $fallarEditar('La reserva no existe.');
+                    } elseif ($actual['estado'] !== 'confirmada') {
+                        $fallarEditar('Solo se pueden modificar reservas confirmadas (sin check-in).');
+                    } elseif ($fechaEntrada !== $actual['fecha_entrada'] && $fechaEntrada < $hoyEditar) {
+                        // Quien llega tarde puede alargar su salida sin tocar la entrada (que ya pasó); lo que no se puede es MOVER la entrada al pasado.
+                        $fallarEditar('La fecha de entrada no puede ser anterior a hoy. Solo puede quedarse la que la reserva ya tenía.');
+                    } elseif (bloquearHabitacion($pdo, $habitacionId) === null) {
+                        $fallarEditar('La habitación seleccionada no existe.');
                     } else {
-                        $antesReserva = auditoriaFila($pdo, 'reservas', $reservaId);
-                        $stmt = $pdo->prepare("update reservas set habitacion_id = ?, fecha_entrada = ?, fecha_salida = ?, num_personas = ?, hora_llegada = ? where id = ? and estado = 'confirmada'");
-                        $stmt->execute([$habitacionId, $fechaEntrada, $fechaSalida, $numPersonas, $horaVal, $reservaId]);
-                        registrarAuditoria($pdo, 'reservas', $reservaId, 'editar', "Reserva modificada: Hab. $habitacionId, $fechaEntrada → $fechaSalida, $numPersonas pers." . ($horaVal ? ", llega $horaVal" : ''),
-                            $antesReserva, auditoriaFila($pdo, 'reservas', $reservaId));
-                        $msg = "Reserva #$reservaId modificada correctamente.";
-                        $msgType = 'success';
+                        $stmtCap = $pdo->prepare("select " . SQL_CAPACIDAD . " as capacidad_max,
+                                                         t.nombre, t.tarifa_1, t.tarifa_2, t.tarifa_extra, t.tarifa_base
+                                                  from habitaciones h
+                                                  left join tipos_habitacion t on t.id = h.tipo_id
+                                                  where h.id = ?");
+                        $stmtCap->execute([$habitacionId]);
+                        $roomEdit = $stmtCap->fetch(PDO::FETCH_ASSOC);
+
+                        if (($motivoOcupacion = motivoOcupacionInvalida($roomEdit, $numPersonas)) !== null) {
+                            $fallarEditar($motivoOcupacion);
+                        } else {
+                            // La misma comprobación que al crear, excluyendo esta reserva para que no choque consigo misma, y con la
+                            // habitación ya bloqueada: la que vale es la de DESPUÉS del bloqueo.
+                            $reservable = habitacionReservable($pdo, $habitacionId, $fechaEntrada, $fechaSalida, $reservaId);
+
+                            if (!$reservable['ok']) {
+                                $fallarEditar(trim($reservable['mensaje'] . ' ' . disponibilidadTextoLibres($reservable['libres'])));
+                            } else {
+                                $antesReserva = auditoriaFila($pdo, 'reservas', $reservaId);
+                                $stmt = $pdo->prepare("update reservas set habitacion_id = ?, fecha_entrada = ?, fecha_salida = ?, num_personas = ?, hora_llegada = ? where id = ? and estado = 'confirmada'");
+                                $stmt->execute([$habitacionId, $fechaEntrada, $fechaSalida, $numPersonas, $horaVal, $reservaId]);
+                                if ($stmt->rowCount() !== 1) {
+                                    $fallarEditar('La reserva cambió mientras se editaba. Recarga la página y revisa su estado.');
+                                } else {
+                                    $pdo->commit();
+                                    // La auditoría va DESPUÉS del commit: es un registro, no parte de la reserva, y no debe alargar el bloqueo.
+                                    registrarAuditoria($pdo, 'reservas', $reservaId, 'editar', "Reserva modificada: Hab. $habitacionId, $fechaEntrada → $fechaSalida, $numPersonas pers." . ($horaVal ? ", llega $horaVal" : ''),
+                                        $antesReserva, auditoriaFila($pdo, 'reservas', $reservaId));
+                                    $msg = "Reserva #$reservaId modificada correctamente.";
+                                    $msgType = 'success';
+                                }
+                            }
+                        }
                     }
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    error_log('Reservas: no se pudo editar la reserva: ' . $e->getMessage());
+                    $msg = 'No se pudo modificar la reserva. Vuelve a intentarlo.';
+                    $msgType = 'danger';
                 }
             }
         }
