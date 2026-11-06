@@ -3,6 +3,7 @@
 $pageTitle = 'Habitaciones';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/validacion.php';   // validarMonto, validarEntero (montos que se teclean)
 require_once __DIR__ . '/../../includes/tarifas.php';
 // Aquí se fijan las tarifas y la capacidad de TODO el hotel, y se crean y retiran
 // habitaciones. El menú (modules/menu.php, grupo «El hotel») ya la reserva al
@@ -29,16 +30,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $tipoId = (int)($_POST['tipo_id'] ?? 0);
             $nombre = trim($_POST['tipo_nombre'] ?? '');
             // La capacidad admite 0, que significa SIN TOPE (ver includes/tarifas.php).
-            $capacidad   = max(0, (int)($_POST['tipo_capacidad'] ?? 0));
+            // 4.2.4: enteros y nada más. Antes (int): una capacidad con letras o negativa se volvía 0 = SIN TOPE, y «40.000» de tarifa se guardaba
+            // como 40 y se copiaba a todas las habitaciones del tipo.
+            $capacidad   = validarEntero($_POST['tipo_capacidad'] ?? '', 0, 99);
             $descripcion = trim($_POST['tipo_descripcion'] ?? '');
 
             // Tres precios: una persona, dos personas, y el recargo por cada
             // persona a partir de la segunda. Vacío no es cero: un precio vacío
             // significa «este tipo no se vende a esa ocupación», y un cero sí
             // sería un precio, de regalo.
-            $tarifa1 = trim((string)($_POST['tipo_tarifa_1'] ?? '')) === '' ? null : (int)$_POST['tipo_tarifa_1'];
-            $tarifa2 = trim((string)($_POST['tipo_tarifa_2'] ?? '')) === '' ? null : (int)$_POST['tipo_tarifa_2'];
-            $tarifaExtra = max(0, (int)($_POST['tipo_tarifa_extra'] ?? 0));
+            $t1Crudo = trim((string)($_POST['tipo_tarifa_1'] ?? ''));
+            $t2Crudo = trim((string)($_POST['tipo_tarifa_2'] ?? ''));
+            $exCrudo = trim((string)($_POST['tipo_tarifa_extra'] ?? ''));
+            $tarifa1 = $t1Crudo === '' ? null : validarMonto($t1Crudo, 0);
+            $tarifa2 = $t2Crudo === '' ? null : validarMonto($t2Crudo, 0);
+            $tarifaExtra = $exCrudo === '' ? 0 : validarMonto($exCrudo, 0);
+            $tarifasInvalidas = ($t1Crudo !== '' && $tarifa1 === null) || ($t2Crudo !== '' && $tarifa2 === null) || ($exCrudo !== '' && $tarifaExtra === null);
 
             // `tarifa_base` ya no se cobra, pero hay consultas que aún la leen:
             // se mantiene como espejo del precio de entrada para que no mienta.
@@ -49,6 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             if ($nombre === '' || ($action === 'editar_tipo' && $tipoId < 1)) {
                 $msg = 'Indica el nombre del tipo.';
+                $msgType = 'danger';
+            } elseif ($capacidad === null) {
+                $msg = 'La capacidad tiene que ser un número entero (0 para dejarla sin tope), sin letras ni signos.';
+                $msgType = 'danger';
+            } elseif ($tarifasInvalidas) {
+                $msg = 'Las tarifas y el recargo deben ser números enteros de pesos, sin letras ni puntos de decimales (por ejemplo 40000).';
                 $msgType = 'danger';
             } elseif (($tarifa1 === null || $tarifa1 < 1) && ($tarifa2 === null || $tarifa2 < 1)) {
                 $msg = 'Pon al menos una tarifa mayor que cero: la de una persona, la de dos, o las dos.';
@@ -572,10 +585,10 @@ require_once __DIR__ . '/../../includes/header.php';
             <form method="POST" class="hb-type-form">
                 <?= csrfField() ?><input type="hidden" name="action" value="editar_tipo"><input type="hidden" name="tipo_id" value="<?= (int)$tipo['id'] ?>">
                 <label class="hb-tf" data-label="Tipo *"><input class="hb-input" name="tipo_nombre" required aria-label="Nombre del tipo" value="<?= htmlspecialchars($tipo['nombre']) ?>"></label>
-                <label class="hb-tf" data-label="Personas (0 = sin tope) *"><input class="hb-input" name="tipo_capacidad" type="number" min="0" required aria-label="Capacidad (0 = sin tope)" value="<?= (int)$tipo['capacidad_max'] ?>"></label>
-                <label class="hb-tf" data-label="1 persona (vacío = no se vende)"><input class="hb-input" name="tipo_tarifa_1" type="number" min="1" step="1" aria-label="Tarifa para una persona" value="<?= $tipo['tarifa_1'] !== null ? (int)$tipo['tarifa_1'] : '' ?>" placeholder="—"></label>
-                <label class="hb-tf" data-label="2 personas (vacío = no admite)"><input class="hb-input" name="tipo_tarifa_2" type="number" min="1" step="1" aria-label="Tarifa para dos personas" value="<?= $tipo['tarifa_2'] !== null ? (int)$tipo['tarifa_2'] : '' ?>" placeholder="—"></label>
-                <label class="hb-tf" data-label="Adicional (por persona de más)"><input class="hb-input" name="tipo_tarifa_extra" type="number" min="0" step="1" aria-label="Recargo por persona adicional" value="<?= (int)($tipo['tarifa_extra'] ?? 0) ?>"></label>
+                <label class="hb-tf" data-label="Personas (0 = sin tope) *"><input class="hb-input" name="tipo_capacidad" type="number" min="0" required data-solo="digitos" aria-label="Capacidad (0 = sin tope)" value="<?= (int)$tipo['capacidad_max'] ?>"></label>
+                <label class="hb-tf" data-label="1 persona (vacío = no se vende)"><input class="hb-input" name="tipo_tarifa_1" type="number" min="1" step="1" data-solo="digitos" aria-label="Tarifa para una persona" value="<?= $tipo['tarifa_1'] !== null ? (int)$tipo['tarifa_1'] : '' ?>" placeholder="—"></label>
+                <label class="hb-tf" data-label="2 personas (vacío = no admite)"><input class="hb-input" name="tipo_tarifa_2" type="number" min="1" step="1" data-solo="digitos" aria-label="Tarifa para dos personas" value="<?= $tipo['tarifa_2'] !== null ? (int)$tipo['tarifa_2'] : '' ?>" placeholder="—"></label>
+                <label class="hb-tf" data-label="Adicional (por persona de más)"><input class="hb-input" name="tipo_tarifa_extra" type="number" min="0" step="1" data-solo="digitos" aria-label="Recargo por persona adicional" value="<?= (int)($tipo['tarifa_extra'] ?? 0) ?>"></label>
                 <label class="hb-tf" data-label="Descripción"><input class="hb-input" name="tipo_descripcion" aria-label="Descripción" value="<?= htmlspecialchars($tipo['descripcion'] ?? '') ?>"></label>
                 <button class="hb-submit editar" type="submit" style="margin:0;padding:10px"><i class="fas fa-floppy-disk"></i> Guardar</button>
             </form>
@@ -583,10 +596,10 @@ require_once __DIR__ . '/../../includes/header.php';
         <form method="POST" class="hb-type-form hb-type-new">
             <?= csrfField() ?><input type="hidden" name="action" value="crear_tipo">
             <label class="hb-tf" data-label="Nuevo tipo *"><input class="hb-input" name="tipo_nombre" required aria-label="Nombre del nuevo tipo" placeholder="Nuevo tipo"></label>
-            <label class="hb-tf" data-label="Personas (0 = sin tope) *"><input class="hb-input" name="tipo_capacidad" type="number" min="0" required aria-label="Capacidad (0 = sin tope)" placeholder="Personas"></label>
-            <label class="hb-tf" data-label="1 persona (vacío = no se vende)"><input class="hb-input" name="tipo_tarifa_1" type="number" min="1" aria-label="Tarifa para una persona" placeholder="1 pers."></label>
-            <label class="hb-tf" data-label="2 personas (vacío = no admite)"><input class="hb-input" name="tipo_tarifa_2" type="number" min="1" aria-label="Tarifa para dos personas" placeholder="2 pers."></label>
-            <label class="hb-tf" data-label="Adicional (por persona de más)"><input class="hb-input" name="tipo_tarifa_extra" type="number" min="0" aria-label="Recargo por persona adicional" placeholder="Adicional" value="0"></label>
+            <label class="hb-tf" data-label="Personas (0 = sin tope) *"><input class="hb-input" name="tipo_capacidad" type="number" min="0" required data-solo="digitos" aria-label="Capacidad (0 = sin tope)" placeholder="Personas"></label>
+            <label class="hb-tf" data-label="1 persona (vacío = no se vende)"><input class="hb-input" name="tipo_tarifa_1" type="number" min="1" data-solo="digitos" aria-label="Tarifa para una persona" placeholder="1 pers."></label>
+            <label class="hb-tf" data-label="2 personas (vacío = no admite)"><input class="hb-input" name="tipo_tarifa_2" type="number" min="1" data-solo="digitos" aria-label="Tarifa para dos personas" placeholder="2 pers."></label>
+            <label class="hb-tf" data-label="Adicional (por persona de más)"><input class="hb-input" name="tipo_tarifa_extra" type="number" min="0" data-solo="digitos" aria-label="Recargo por persona adicional" placeholder="Adicional" value="0"></label>
             <label class="hb-tf" data-label="Descripción"><input class="hb-input" name="tipo_descripcion" aria-label="Descripción" placeholder="Descripción"></label>
             <button class="hb-submit crear" type="submit" style="margin:0;padding:10px"><i class="fas fa-plus"></i> Agregar</button>
         </form>

@@ -169,6 +169,8 @@ document.addEventListener('DOMContentLoaded', function() {
      campos-obligatorios.js usa la notificación, y el botón de envío debe ir después para ver si el envío se detuvo. -->
 <script src="<?= BASE_URL ?>/assets/js/avisos-ui.js?v=<?= defined("APP_VERSION") ? htmlspecialchars(APP_VERSION) : "1" ?>"></script>
 <script src="<?= BASE_URL ?>/assets/js/campos-obligatorios.js?v=<?= defined("APP_VERSION") ? htmlspecialchars(APP_VERSION) : "1" ?>"></script>
+<?php /* 4.2.3: documento y teléfono de las personas solo aceptan lo que les corresponde (los campos con data-solo). */ ?>
+<script src="<?= BASE_URL ?>/assets/js/campos-numericos.js?v=<?= defined("APP_VERSION") ? htmlspecialchars(APP_VERSION) : "1" ?>"></script>
 <script src="<?= BASE_URL ?>/assets/js/toast-spinner.js?v=<?= defined("APP_VERSION") ? htmlspecialchars(APP_VERSION) : "1" ?>"></script>
 <?php
 // Los mensajes que la pantalla dejó en $msg/$msgType, $mensaje o $flash salen como notificación (includes/mensajes.php decide cómo).

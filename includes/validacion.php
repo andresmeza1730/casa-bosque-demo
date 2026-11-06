@@ -83,6 +83,62 @@ function validarNombre(?string $nombre, int $maxLen = 100): ?string {
     return $nombre;
 }
 
+// ── Montos, tarifas y otros enteros que se teclean (4.2.4) ──────────────────
+// Hasta 4.2.3 cada pantalla convertía el campo con `(int)` o `(float)`, y PHP no rechaza nada con eso: «abc» daba 0 (un precio
+// de $0 guardado, una capacidad «sin tope»), «12abc» daba 12, «1e6» daba un millón y «40.000» —cómo se escribe cuarenta mil pesos
+// en Colombia— daba 40. Estas funciones son la ÚNICA forma de leer un monto o un entero de un formulario: devuelven el número o
+// null, y quien llama dice qué estaba mal. Nunca convierten «lo que se pueda».
+
+/** Tope de cualquier monto en pesos: cabe de sobra en decimal(12,2) y nadie en el hotel cobra más. */
+const MONTO_MAX = 999999999;
+
+/**
+ * Deja el texto de un número entero listo para convertirlo: solo dígitos, con o sin separador de miles
+ * («1.500», «1,500», «1 500»). Devuelve null si trae cualquier otra cosa (letras, signos, notación científica,
+ * decimales, un arreglo en lugar de un texto…).
+ */
+function textoEntero(mixed $valor): ?string {
+    if (!is_string($valor) && !is_int($valor)) return null;
+    $t = trim((string) $valor);
+    if ($t === '') return null;
+    if (preg_match('/^\d{1,3}(?:[.,\x{00A0} ]\d{3})+$/u', $t)) {
+        $t = preg_replace('/[.,\x{00A0} ]/u', '', $t) ?? '';
+    }
+    return preg_match('/^\d{1,18}$/', $t) === 1 ? $t : null;
+}
+
+/** Entero entre $min y $max, o null si el campo no es un entero o se sale del rango. */
+function validarEntero(mixed $valor, int $min = 0, int $max = PHP_INT_MAX): ?int {
+    $t = textoEntero($valor);
+    if ($t === null) return null;
+    $n = (int) $t;
+    return ($n >= $min && $n <= $max) ? $n : null;
+}
+
+/** Monto en pesos enteros (sin centavos), de $min a MONTO_MAX, o null. */
+function validarMonto(mixed $valor, int $min = 1): ?int {
+    return validarEntero($valor, $min, MONTO_MAX);
+}
+
+// ── Documento según su tipo (4.2.3) ─────────────────────────────────────────
+// Hasta 4.2.2 el documento de un huésped se guardaba tal cual lo tecleaban: una cédula con letras salía igual que una
+// con dígitos. Esta es la forma de leer un documento de un formulario: devuelve el número normalizado o null, y quien llama
+// dice qué estaba mal. El filtro de assets/js/campos-numericos.js es ayuda en pantalla; esto es lo que manda.
+/**
+ * Número de documento según su tipo. CC, CE, TI, RC y NIT son solo dígitos (se aceptan puntos, guiones y espacios
+ * al teclear y se quitan: «1.234.567.890»); el pasaporte lleva letras y números. Devuelve el documento normalizado
+ * o null. Para un documento sin tipo conocido, usa validarDocumento().
+ */
+function validarDocumentoTipo(?string $tipo, ?string $doc): ?string {
+    $tipo = strtoupper((string) $tipo);
+    $doc = strtoupper(limpiarTexto($doc, 40));
+    if (in_array($tipo, ['CC', 'CE', 'TI', 'RC', 'NIT'], true)) {
+        $solo = preg_replace('/[\s.\-]/', '', $doc) ?? '';
+        return preg_match('/^\d{3,20}$/', $solo) === 1 ? $solo : null;
+    }
+    return preg_match('/^[A-Z0-9\-]{3,30}$/', $doc) === 1 ? $doc : null;
+}
+
 // Longitud mínima de contraseña (política ISO 27001). Centralizada para
 // reutilizar en el mensaje de ayuda de la interfaz.
 const PASSWORD_MIN_LEN = 10;

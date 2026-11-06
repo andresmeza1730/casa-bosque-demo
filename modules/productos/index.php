@@ -3,6 +3,7 @@
 $pageTitle = 'Carta y Restaurante';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/validacion.php';   // validarMonto, validarEntero (montos que se teclean)
 requireLogin();
 
 $pdo = getDB();
@@ -26,11 +27,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         if ($accion === 'guardar') {
             $nombre = trim($_POST['nombre'] ?? '');
-            $precio = (float)str_replace(',', '.', $_POST['precio'] ?? '0');
+            // 4.2.4: un entero de pesos (0 si es gratis). Antes (float): «abc» guardaba el producto a $0 y «1.500» a 1,5.
+            $precio = validarMonto($_POST['precio'] ?? '', 0);
             $categoria = $_POST['categoria'] ?? '';
             $descripcion = trim($_POST['descripcion'] ?? '');
-            if ($nombre === '' || $precio < 0 || !isset($tipos[$categoria])) {
-                $mensaje = 'Completa el nombre, un precio válido y una categoría.'; $mensajeTipo = 'danger';
+            if ($nombre === '' || !isset($tipos[$categoria])) {
+                $mensaje = 'Completa el nombre y una categoría.'; $mensajeTipo = 'danger';
+            } elseif ($precio === null) {
+                $mensaje = 'El precio debe ser un número entero de pesos (0 si es gratis), sin letras ni decimales, por ejemplo 15000.'; $mensajeTipo = 'danger';
             } elseif ($id > 0) {
                 $antesProd = auditoriaFila($pdo, 'productos', $id);
                 $stmt = $pdo->prepare('update productos set nombre = ?, descripcion = ?, precio = ?, categoria = ? where id = ?');
@@ -84,7 +88,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <input type="hidden" name="id" value="<?= (int)($editar['id'] ?? 0) ?>">
             <div class="pr-grid">
                 <div class="pr-field"><label for="nombre">Nombre</label><input id="nombre" name="nombre" required maxlength="100" value="<?= htmlspecialchars($editar['nombre'] ?? '') ?>"></div>
-                <div class="pr-field"><label for="precio">Precio (COP)</label><input id="precio" name="precio" type="number" required min="0" step="100" value="<?= htmlspecialchars((string)($editar['precio'] ?? '')) ?>"></div>
+                <div class="pr-field"><label for="precio">Precio (COP)</label><input id="precio" name="precio" type="number" required min="0" step="1" data-solo="digitos" value="<?= htmlspecialchars((string)($editar['precio'] ?? '')) ?>"></div>
                 <div class="pr-field"><label for="categoria">Categoría</label><select id="categoria" name="categoria" required><?php foreach ($tipos as $valor => $etiqueta): ?><option value="<?= $valor ?>" <?= ($editar['categoria'] ?? '') === $valor ? 'selected' : '' ?>><?= htmlspecialchars($etiqueta) ?></option><?php endforeach; ?></select></div>
                 <div class="pr-field wide"><label for="descripcion">Descripción (opcional)</label><textarea id="descripcion" name="descripcion" rows="2" maxlength="200"><?= htmlspecialchars($editar['descripcion'] ?? '') ?></textarea></div>
                 <div class="wide"><button class="pr-save" type="submit"><?= $editar ? 'Guardar cambios' : 'Agregar producto' ?></button><?php if ($editar): ?> <a href="<?= BASE_URL ?>/modules/productos/index.php">Cancelar</a><?php endif; ?></div>

@@ -3,6 +3,7 @@
 $pageTitle = 'Consumos';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/validacion.php';   // validarMonto, validarEntero (montos que se teclean)
 requireLogin();
 
 $pdo = getDB();
@@ -55,7 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'agreg
         $estanciaId = (int)($_POST['estancia_id'] ?? 0);
         $productoId = (int)($_POST['producto_id'] ?? 0);
         $descripcion = trim($_POST['descripcion'] ?? '');
-        $precio = (float)str_replace(',', '.', $_POST['precio'] ?? '0');
+        // 4.2.4: un entero de pesos, o null. Antes (float): «12abc» se cobraba como 12 y «1.500» como 1,5. Con un producto de la carta el
+        // precio sale de la base y esto se ignora.
+        $precio = validarMonto($_POST['precio'] ?? '', 1);
         $cantidad = (int)($_POST['cantidad'] ?? 0);
 
         if ($productoId > 0) {
@@ -79,8 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'agreg
             } elseif ($descripcion === '') {
                 $msg = 'El nombre del producto o servicio es obligatorio.';
                 $msgType = 'danger';
-            } elseif ($precio <= 0) {
-                $msg = 'El precio debe ser mayor a cero.';
+            } elseif ($precio === null || $precio <= 0) {
+                $msg = 'El precio debe ser un número entero de pesos mayor a cero, sin letras (por ejemplo 15000).';
                 $msgType = 'danger';
             } elseif ($cantidad < 1 || $cantidad > 99) {
                 $msg = 'La cantidad debe estar entre 1 y 99.';
@@ -434,7 +437,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="cs-row2">
                     <div class="cs-field">
                         <label for="precio"><i class="fas fa-coins"></i> Precio (COP)</label>
-                        <input type="number" name="precio" id="precio" class="cs-input" placeholder="0" min="1" step="1" required oninput="calcularSubtotal()">
+                        <input type="number" name="precio" id="precio" class="cs-input" placeholder="0" min="1" step="1" data-solo="digitos" required oninput="calcularSubtotal()">
                     </div>
                     <div class="cs-field">
                         <label for="cantidad"><i class="fas fa-hashtag"></i> Cantidad</label>

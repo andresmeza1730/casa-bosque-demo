@@ -46,14 +46,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // que el huésped autorizó el tratamiento de sus datos (form físico).
             $habeasData = isset($_POST['habeas_data']) && $_POST['habeas_data'] === '1';
 
-            if (empty($docNum) || empty($nombres) || empty($apellidos)) {
+            // El documento y el teléfono se validan EN EL SERVIDOR (el filtro de la pantalla es solo ayuda): una cédula con letras ya
+            // no se guarda. CC, CE y NIT llevan solo números; el pasaporte, letras y números.
+            $docNorm = validarDocumentoTipo($docTipo, $docNum);
+            $telNorm = $telefono === '' ? '' : validarTelefono($telefono);
+
+            if (!in_array($docTipo, ['CC', 'CE', 'PAS', 'NIT'], true) || $docNum === '' || empty($nombres) || empty($apellidos)) {
                 $msg = 'Documento, nombres y apellidos son obligatorios.';
+                $msgType = 'danger';
+            } elseif ($docNorm === null) {
+                $msg = $docTipo === 'PAS'
+                    ? 'El pasaporte solo puede llevar letras y números (entre 3 y 30 caracteres).'
+                    : 'El número de documento solo puede llevar números (entre 3 y 20), sin letras.';
+                $msgType = 'danger';
+            } elseif ($telNorm === null) {
+                $msg = 'El teléfono no es válido: solo números (mínimo 7), y puede llevar +, - y paréntesis.';
                 $msgType = 'danger';
             } elseif (!$habeasData) {
                 $msg = 'Debes confirmar que el huésped autorizó el Tratamiento de Datos Personales (Ley 1581).';
                 $msgType = 'danger';
             } else {
                 $check = $pdo->prepare("select id from huespedes where documento_hash = ?");
+                $docNum = $docNorm;   // lo que se guarda es el documento ya validado y normalizado
+                $telefono = $telNorm;
                 $check->execute([indiceCiego($docNum)]);
                 if ($check->fetch()) {
                     $msg = 'Ya existe un huésped con ese número de documento.';
@@ -78,7 +93,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email     = trim($_POST['email'] ?? '');
             $ciudad    = trim($_POST['ciudad_origen'] ?? '');
 
-            if ($id > 0) {
+            $telNorm = $telefono === '' ? '' : validarTelefono($telefono);
+            if ($id > 0 && $telNorm === null) {
+                $msg = 'El teléfono no es válido: solo números (mínimo 7), y puede llevar +, - y paréntesis. No se guardó nada.';
+                $msgType = 'danger';
+            } elseif ($id > 0) {
+                $telefono = $telNorm;
                 // De un huésped la auditoría guarda QUÉ campos cambiaron, nunca sus
                 // valores (ver includes/auditoria.php): la fila no se puede borrar y
                 // el huésped tiene derecho a que se le anonimice. Se compara lo
@@ -309,6 +329,14 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 <?php endif; ?>
 
+<?php
+// 4.2.5: si el huésped NO se pudo registrar, el formulario vuelve con lo que se tecleó (antes salía vacío y había que escribir todo otra
+// vez). Solo al crear y solo si falló; siempre escapado al pintarlo.
+$huConservar = !$editData && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'crear' && $msgType !== 'success';
+$huPrev = function (string $campo, string $porDefecto = '') use ($huConservar): string {
+    return $huConservar && is_string($_POST[$campo] ?? null) ? $_POST[$campo] : $porDefecto;
+};
+?>
 <!-- Formulario crear / editar -->
 <div class="hu-card">
     <div class="hu-card-h">
@@ -328,26 +356,25 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="hu-field">
                     <label><i class="fas fa-id-card"></i> Tipo</label>
                     <select name="documento_tipo" class="hu-select" required <?= $editData ? 'disabled' : '' ?>>
-                        <option value="CC" <?= (isset($editData['documento_tipo']) && $editData['documento_tipo']==='CC') ? 'selected' : '' ?>>CC</option>
-                        <option value="CE" <?= (isset($editData['documento_tipo']) && $editData['documento_tipo']==='CE') ? 'selected' : '' ?>>CE</option>
-                        <option value="PAS" <?= (isset($editData['documento_tipo']) && $editData['documento_tipo']==='PAS') ? 'selected' : '' ?>>PAS</option>
-                        <option value="NIT" <?= (isset($editData['documento_tipo']) && $editData['documento_tipo']==='NIT') ? 'selected' : '' ?>>NIT</option>
+                        <?php foreach (['CC', 'CE', 'PAS', 'NIT'] as $tipoDoc): ?>
+                            <option value="<?= $tipoDoc ?>" <?= (($editData['documento_tipo'] ?? $huPrev('documento_tipo')) === $tipoDoc) ? 'selected' : '' ?>><?= $tipoDoc ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="hu-field">
                     <label><i class="fas fa-hashtag"></i> N° Documento</label>
-                    <input type="text" name="documento_num" class="hu-input" required placeholder="1234567890" value="<?= htmlspecialchars($editData['documento_num'] ?? '') ?>" <?= $editData ? 'readonly' : '' ?>>
+                    <input type="text" name="documento_num" class="hu-input" required maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="documento_tipo" placeholder="1234567890" value="<?= htmlspecialchars($editData['documento_num'] ?? $huPrev('documento_num')) ?>" <?= $editData ? 'readonly' : '' ?>>
                 </div>
             </div>
 
             <div class="hu-row2" style="grid-template-columns:1fr 1fr;">
                 <div class="hu-field">
                     <label><i class="fas fa-user"></i> Nombres</label>
-                    <input type="text" name="nombres" class="hu-input" required placeholder="Juan Carlos" value="<?= htmlspecialchars($editData['nombres'] ?? '') ?>" <?= $editData ? 'readonly' : '' ?>>
+                    <input type="text" name="nombres" class="hu-input" required placeholder="Juan Carlos" value="<?= htmlspecialchars($editData['nombres'] ?? $huPrev('nombres')) ?>" <?= $editData ? 'readonly' : '' ?>>
                 </div>
                 <div class="hu-field">
                     <label><i class="fas fa-user"></i> Apellidos</label>
-                    <input type="text" name="apellidos" class="hu-input" required placeholder="García López" value="<?= htmlspecialchars($editData['apellidos'] ?? '') ?>" <?= $editData ? 'readonly' : '' ?>>
+                    <input type="text" name="apellidos" class="hu-input" required placeholder="García López" value="<?= htmlspecialchars($editData['apellidos'] ?? $huPrev('apellidos')) ?>" <?= $editData ? 'readonly' : '' ?>>
                 </div>
             </div>
 
@@ -357,28 +384,28 @@ require_once __DIR__ . '/../../includes/header.php';
 
             <div class="hu-field">
                 <label><i class="fas fa-phone"></i> Teléfono</label>
-                <input type="tel" name="telefono" class="hu-input" placeholder="300 123 4567" value="<?= htmlspecialchars($editData['telefono'] ?? '') ?>">
+                <input type="tel" name="telefono" class="hu-input" maxlength="20" data-solo="telefono" placeholder="300 123 4567" value="<?= htmlspecialchars($editData['telefono'] ?? $huPrev('telefono')) ?>">
             </div>
             <div class="hu-field">
                 <label><i class="fas fa-envelope"></i> Correo electrónico</label>
-                <input type="email" name="email" class="hu-input" placeholder="correo@ejemplo.com" value="<?= htmlspecialchars($editData['email'] ?? '') ?>">
+                <input type="email" name="email" class="hu-input" placeholder="correo@ejemplo.com" value="<?= htmlspecialchars($editData['email'] ?? $huPrev('email')) ?>">
             </div>
             <div class="hu-field">
                 <label><i class="fas fa-map-marker-alt"></i> Ciudad de origen</label>
-                <input type="text" name="ciudad_origen" class="hu-input" placeholder="Ej: Bucaramanga" value="<?= htmlspecialchars($editData['ciudad_origen'] ?? '') ?>">
+                <input type="text" name="ciudad_origen" class="hu-input" placeholder="Ej: Bucaramanga" value="<?= htmlspecialchars($editData['ciudad_origen'] ?? $huPrev('ciudad_origen')) ?>">
             </div>
 
             <?php if (!$editData): ?>
             <div class="hu-field">
                 <label><i class="fas fa-flag"></i> Nacionalidad</label>
-                <input type="text" name="nacionalidad" class="hu-input" placeholder="Colombia" value="Colombia">
+                <input type="text" name="nacionalidad" class="hu-input" placeholder="Colombia" value="<?= htmlspecialchars($huPrev('nacionalidad', 'Colombia')) ?>">
             </div>
             <?php endif; ?>
 
             <?php if (!$editData): ?>
             <!-- Consentimiento Habeas Data (Ley 1581) — obligatorio, desmarcado por defecto -->
             <label style="display:flex; gap:10px; align-items:flex-start; margin:14px 0 4px; font-size:.86rem; line-height:1.5; cursor:pointer; color:var(--cb-text,#2A1709);">
-                <input type="checkbox" name="habeas_data" value="1" required style="margin-top:3px; width:17px; height:17px; flex-shrink:0;">
+                <input type="checkbox" name="habeas_data" value="1" required <?= $huPrev('habeas_data') === '1' ? 'checked' : '' ?> style="margin-top:3px; width:17px; height:17px; flex-shrink:0;">
                 <span>El huésped autorizó el Tratamiento de sus Datos Personales conforme a la
                     <a href="<?= BASE_URL ?>/politica-datos.php<?= volverDesdeAqui() ?>" target="_blank" rel="noopener" style="color:var(--cb-primary,#6B4420); font-weight:600;">Política de Tratamiento de Datos</a> (Ley 1581 de 2012).</span>
             </label>

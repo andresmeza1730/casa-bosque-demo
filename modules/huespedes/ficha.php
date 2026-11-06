@@ -14,6 +14,7 @@
 $pageTitle = 'Estado de cuenta';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/validacion.php';   // validarMonto, validarEntero (montos que se teclean)
 require_once __DIR__ . '/../../includes/cifrado.php';
 require_once __DIR__ . '/../../includes/noches.php';
 require_once __DIR__ . '/../../includes/tarifas.php';   // tarifaPorPersonas()
@@ -123,7 +124,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
         $msgType = 'danger';
     } else {
         $estId  = (int)($_POST['estancia_id'] ?? 0);
-        $monto  = (float)str_replace(',', '.', $_POST['monto'] ?? '0');
+        // 4.2.4: un entero de pesos. Antes (float): «12abc» registraba 12, «1e6» un millón y «1.000» un peso.
+        $monto  = validarMonto($_POST['monto'] ?? '', 1);
         $metodo = $_POST['metodo'] ?? 'efectivo';
         $nota   = trim($_POST['nota'] ?? '');
         if (!in_array($metodo, ['efectivo', 'tarjeta', 'transferencia', 'nequi', 'otro'], true)) {
@@ -131,8 +133,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
         }
         if ($estId < 1) {
             $msg = 'Estancia inválida.'; $msgType = 'danger';
-        } elseif ($monto <= 0) {
-            $msg = 'El monto debe ser mayor a cero.'; $msgType = 'danger';
+        } elseif ($monto === null) {
+            $msg = 'El monto debe ser un número entero de pesos mayor a cero, sin letras (por ejemplo 50000).'; $msgType = 'danger';
         } else {
             // Mismo patrón que el resto: bloquear la estancia y revalidar
             // dentro, para que un pago no entre justo mientras se cierra la
@@ -419,6 +421,15 @@ require_once __DIR__ . '/../../includes/header.php';
 .pg-overlay.active { opacity:1; pointer-events:auto; }
 .pg-card { background:#fff; width:100%; max-width:460px; border-radius:22px 22px 0 0; padding:18px 18px calc(22px + env(safe-area-inset-bottom)); transform:translateY(100%); transition:transform .28s cubic-bezier(.34,1.4,.5,1); }
 .pg-overlay.active .pg-card { transform:translateY(0); }
+/* El pago es una hoja que sube desde abajo, pensada para el celular. En una pantalla ancha quedaba pegada al borde de abajo y la
+   ventana del navegador la cortaba (se veían los botones a medias): ahí se CENTRA como una tarjeta, y en cualquier pantalla, si no
+   cabe, se desplaza por dentro en vez de salirse. */
+.pg-card { max-height:94vh; max-height:94dvh; overflow-y:auto; }
+@media (min-width: 769px) {
+    .pg-overlay { align-items:center; padding:16px; }
+    .pg-card { border-radius:22px; padding:22px; transform:scale(.94); box-shadow:0 24px 60px rgba(42,23,9,.28); }
+    .pg-overlay.active .pg-card { transform:scale(1); }
+}
 .pg-title { font-size:1.05rem; font-weight:800; color:var(--cb-forest,#3E2412); display:flex; align-items:center; gap:9px; margin:0 0 4px; }
 .pg-sub { font-size:.8rem; color:var(--cb-muted,#9A8778); margin-bottom:14px; }
 .pg-field { margin-bottom:12px; }
@@ -738,7 +749,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <input type="hidden" name="estancia_id" id="pgEstancia" value="">
             <div class="pg-field">
                 <label for="pgMonto">Monto a pagar (COP)</label>
-                <input type="number" name="monto" id="pgMonto" class="pg-input" min="1" step="1" inputmode="numeric" placeholder="0" required oninput="pgChequear()">
+                <input type="number" name="monto" id="pgMonto" class="pg-input" min="1" step="1" inputmode="numeric" data-solo="digitos" placeholder="0" required oninput="pgChequear()">
                 <div id="pgWarn" style="display:none; margin-top:8px; font-size:.78rem; color:#b45309; background:#fff3e8; border:1px solid rgba(249,115,22,.28); border-radius:10px; padding:9px 11px;">
                     <i class="fas fa-triangle-exclamation"></i> <span id="pgWarnTxt"></span>
                 </div>

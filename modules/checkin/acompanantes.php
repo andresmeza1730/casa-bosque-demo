@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nombres   = limpiarTexto($_POST['nombres']   ?? '', 100);
             $apellidos = limpiarTexto($_POST['apellidos'] ?? '', 100);
             $docTipo   = $_POST['documento_tipo'] ?? 'CC';
-            $docNum    = trim($_POST['documento_num'] ?? '');
+            $docNum    = trim((string) ($_POST['documento_num'] ?? ''));
             $fechaNac  = trim($_POST['fecha_nacimiento'] ?? '');
             $nacion    = limpiarTexto($_POST['nacionalidad'] ?? 'COLOMBIA', 60) ?: 'COLOMBIA';
             $parent    = limpiarTexto($_POST['parentesco'] ?? '', 40);
@@ -111,6 +111,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($nombres === '' || $apellidos === '') {
                 $msg = 'El nombre y los apellidos son obligatorios.'; $msgType = 'danger';
+            } elseif ($docNum !== '' && validarDocumentoTipo($docTipo, $docNum) === null) {
+                // 4.2.3: el documento del acompañante, según su tipo (CC, CE, TI y RC solo números; PAS con letras).
+                $msg = $docTipo === 'PAS'
+                    ? 'El pasaporte solo puede llevar letras y números (entre 3 y 30 caracteres).'
+                    : 'El número de documento solo puede llevar números (entre 3 y 20), sin letras.';
+                $msgType = 'danger';
+            } elseif (($r1Doc !== '' && validarDocumento($r1Doc) === null) || ($r2Doc !== '' && validarDocumento($r2Doc) === null)) {
+                $msg = 'El documento del responsable solo puede llevar letras y números, sin espacios ni símbolos.';
+                $msgType = 'danger';
             } elseif ($esMenor && $viajaCon === null) {
                 $msg = 'Para un menor hay que indicar con quién viaja.'; $msgType = 'danger';
             } elseif ($esMenor && $viajaCon !== 'ambos_padres' && $notaria === '') {
@@ -118,6 +127,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // es opcional: es el documento que exige la ley.
                 $msg = 'Si el menor no viaja con ambos padres, debe registrarse la notaría de la autorización.'; $msgType = 'danger';
             } else {
+                // Lo que se guarda es el documento ya validado y normalizado (sin puntos ni espacios).
+                if ($docNum !== '') $docNum = validarDocumentoTipo($docTipo, $docNum);
+                if ($r1Doc !== '') $r1Doc = validarDocumento($r1Doc);
+                if ($r2Doc !== '') $r2Doc = validarDocumento($r2Doc);
                 try {
                     $consTxt = null;
                     if ($esMenor) {
@@ -352,7 +365,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <option value="PAS">Pasaporte</option>
                         </select></div>
                     <div class="pc-f"><label for="ac-dn">Número de documento</label>
-                        <input type="text" id="ac-dn" name="documento_num" maxlength="30"></div>
+                        <input type="text" id="ac-dn" name="documento_num" maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="documento_tipo"></div>
                 </div>
 
                 <div class="pc-grid">
@@ -371,7 +384,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <div class="t"><i class="fas fa-child"></i> Es menor de edad — datos exigidos por la ley</div>
 
                     <div class="pc-f"><label for="ac-rc">Número de Registro Civil</label>
-                        <input type="text" id="ac-rc" name="registro_civil" maxlength="60"></div>
+                        <input type="text" id="ac-rc" name="registro_civil" maxlength="60" data-solo="alfanum"></div>
 
                     <div class="pc-f"><label for="ac-vc">¿Con quién viaja?</label>
                         <select id="ac-vc" name="viaja_con">
@@ -385,14 +398,14 @@ require_once __DIR__ . '/../../includes/header.php';
                         <div class="pc-f"><label for="ac-r1n">Responsable 1 — nombre</label>
                             <input type="text" id="ac-r1n" name="responsable1_nombre" maxlength="120"></div>
                         <div class="pc-f"><label for="ac-r1d">Responsable 1 — documento</label>
-                            <input type="text" id="ac-r1d" name="responsable1_doc" maxlength="30"></div>
+                            <input type="text" id="ac-r1d" name="responsable1_doc" maxlength="30" data-solo="alfanum"></div>
                     </div>
 
                     <div class="pc-grid" id="bloque-r2">
                         <div class="pc-f"><label for="ac-r2n">Responsable 2 — nombre</label>
                             <input type="text" id="ac-r2n" name="responsable2_nombre" maxlength="120"></div>
                         <div class="pc-f"><label for="ac-r2d">Responsable 2 — documento</label>
-                            <input type="text" id="ac-r2d" name="responsable2_doc" maxlength="30"></div>
+                            <input type="text" id="ac-r2d" name="responsable2_doc" maxlength="30" data-solo="alfanum"></div>
                     </div>
 
                     <div class="pc-f" id="bloque-notaria" style="display:none;">

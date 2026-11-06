@@ -218,7 +218,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'checkin') {
             $huespedId = 0; $errNuevo = '';
             if ($modo === 'nuevo') {
                 $docTipo   = in_array(($_POST['n_documento_tipo'] ?? ''), ['CC','CE','PAS','NIT'], true) ? $_POST['n_documento_tipo'] : 'CC';
-                $docNum    = validarDocumento($_POST['n_documento_num'] ?? '');
+                // CC, CE y NIT son solo números; el pasaporte lleva letras (4.2.3: antes una cédula con letras pasaba).
+                $docNum    = validarDocumentoTipo($docTipo, (string) ($_POST['n_documento_num'] ?? ''));
                 $nombres   = validarNombre($_POST['n_nombres'] ?? '');
                 $apellidos = validarNombre($_POST['n_apellidos'] ?? '');
                 $telRaw    = trim($_POST['n_telefono'] ?? '');
@@ -231,8 +232,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'checkin') {
                 $email     = $mailRaw === '' ? '' : validarEmail($mailRaw);
                 $habeas    = isset($_POST['n_habeas_data']) && $_POST['n_habeas_data'] === '1';
 
-                if ($docNum === null)                             $errNuevo = 'El documento del nuevo huésped no es válido.';
-                elseif ($nombres === null || $apellidos === null) $errNuevo = 'Nombres y apellidos del nuevo huésped no son válidos.';
+                if ($docNum === null)                             $errNuevo = $docTipo === 'PAS'
+                    ? 'El pasaporte del nuevo huésped solo puede llevar letras y números.'
+                    : 'El documento del nuevo huésped solo puede llevar números, sin letras.';
+                // Dice CUÁL de los dos falla y por qué (antes: «no son válidos», sin más) y qué se acepta.
+                elseif ($nombres === null)                        $errNuevo = 'Los nombres del nuevo huésped solo pueden llevar letras, espacios, guion, apóstrofo y punto (sin números), y mínimo 2 caracteres.';
+                elseif ($apellidos === null)                      $errNuevo = 'Los apellidos del nuevo huésped solo pueden llevar letras, espacios, guion, apóstrofo y punto (sin números), y mínimo 2 caracteres.';
                 elseif ($telRaw !== '' && $telefono === null)     $errNuevo = 'El teléfono del nuevo huésped no es válido.';
                 elseif ($mailRaw !== '' && $email === null)       $errNuevo = 'El correo del nuevo huésped no es válido.';
                 elseif (!$habeas)                                 $errNuevo = 'Debes registrar el consentimiento de datos (Habeas Data) del huésped.';
@@ -336,21 +341,35 @@ $estanciasActivas = $pdo->query("select e.id, e.fecha_checkin, e.tarifa_noche, h
  * campos de pasaporte y sello migratorio. La validación real está en
  * el backend; aquí es solo apoyo de UX.
  */
-function renderIvaExento(): void {
+// $prev: lo que se tecleó la vez anterior cuando el ingreso no se pudo registrar (4.2.5); vacío en una pantalla recién abierta.
+function renderIvaExento(array $prev = []): void {
+    $marcado = ($prev['iva_exento'] ?? '') === '1';
     ?>
     <div class="ci-iva">
         <label class="ci-iva-check">
-            <input type="checkbox" name="iva_exento" value="1"
+            <input type="checkbox" name="iva_exento" value="1" <?= $marcado ? 'checked' : '' ?>
                    onchange="var f=this.closest('.ci-iva').querySelector('.ci-iva-fields');f.style.display=this.checked?'grid':'none';f.querySelectorAll('input').forEach(function(i){i.required=this.checked}.bind(this));">
             <span><i class="fas fa-passport"></i> Extranjero exento de IVA (Art. 481 E.T.)</span>
         </label>
-        <div class="ci-iva-fields" style="display:none;">
-            <input type="text" name="pasaporte_num" maxlength="40" placeholder="N° de pasaporte">
-            <input type="text" name="sello_migratorio" maxlength="40" placeholder="Código sello migratorio (PT)">
+        <div class="ci-iva-fields" style="display:<?= $marcado ? 'grid' : 'none' ?>;">
+            <input type="text" name="pasaporte_num" maxlength="40" placeholder="N° de pasaporte" value="<?= htmlspecialchars((string) ($prev['pasaporte_num'] ?? '')) ?>" <?= $marcado ? 'required' : '' ?>>
+            <input type="text" name="sello_migratorio" maxlength="40" placeholder="Código sello migratorio (PT)" value="<?= htmlspecialchars((string) ($prev['sello_migratorio'] ?? '')) ?>" <?= $marcado ? 'required' : '' ?>>
         </div>
     </div>
     <?php
 }
+
+// ── Si el ingreso de mostrador NO se pudo registrar, el formulario vuelve con lo que se tecleó (4.2.5) ──
+// Antes la página se recargaba con el error y el formulario salía VACÍO: con «Nombres y apellidos no son válidos» había que volver
+// a escribir el documento, el teléfono, el correo, la habitación y las personas. Solo se conserva cuando falló (nunca tras un
+// ingreso registrado) y siempre escapado al pintarlo.
+$ciConservar = $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['action'] ?? '') === 'checkin' && ($_POST['tipo_checkin'] ?? '') === 'sin_reserva'
+    && $msgType !== 'success';
+$ciPrev = function (string $campo) use ($ciConservar): string {
+    return $ciConservar && is_string($_POST[$campo] ?? null) ? $_POST[$campo] : '';
+};
+$ciModoInicial = ($ciPrev('huesped_modo') === 'existente') ? 'existente' : 'nuevo';
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -579,23 +598,25 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div id="ci-nuevo">
                     <div class="ci-row-doc">
                         <select name="n_documento_tipo" class="ci-select">
-                            <option value="CC">CC</option><option value="CE">CE</option><option value="PAS">PAS</option><option value="NIT">NIT</option>
+                            <?php foreach (['CC', 'CE', 'PAS', 'NIT'] as $tipoDoc): ?>
+                                <option value="<?= $tipoDoc ?>" <?= $ciPrev('n_documento_tipo') === $tipoDoc ? 'selected' : '' ?>><?= $tipoDoc ?></option>
+                            <?php endforeach; ?>
                         </select>
-                        <input type="text" name="n_documento_num" class="ci-input" data-req maxlength="30" placeholder="N° de documento" autocomplete="off">
+                        <input type="text" name="n_documento_num" class="ci-input" data-req maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="n_documento_tipo" placeholder="N° de documento" autocomplete="off" value="<?= htmlspecialchars($ciPrev('n_documento_num')) ?>">
                     </div>
                     <div class="ci-row2">
-                        <input type="text" name="n_nombres" class="ci-input" data-req maxlength="100" placeholder="Nombres" autocomplete="off">
-                        <input type="text" name="n_apellidos" class="ci-input" data-req maxlength="100" placeholder="Apellidos" autocomplete="off">
+                        <input type="text" name="n_nombres" class="ci-input" data-req maxlength="100" placeholder="Nombres" autocomplete="off" value="<?= htmlspecialchars($ciPrev('n_nombres')) ?>">
+                        <input type="text" name="n_apellidos" class="ci-input" data-req maxlength="100" placeholder="Apellidos" autocomplete="off" value="<?= htmlspecialchars($ciPrev('n_apellidos')) ?>">
                     </div>
                     <div class="ci-row2" style="margin-bottom:4px;">
-                        <input type="tel" name="n_telefono" class="ci-input" maxlength="20" placeholder="Teléfono (opcional)" autocomplete="off">
+                        <input type="tel" name="n_telefono" class="ci-input" maxlength="20" data-solo="telefono" placeholder="Teléfono (opcional)" autocomplete="off" value="<?= htmlspecialchars($ciPrev('n_telefono')) ?>">
                         <?php /* El correo es un dato de contacto del huésped. Hasta 3.12.0
                                  además servía para mandarle la factura; el sistema ya no
                                  manda correos (3.13.0), pero el dato se sigue pidiendo. */ ?>
-                        <input type="email" name="n_email" class="ci-input" maxlength="150" placeholder="Correo (opcional)" autocomplete="off">
+                        <input type="email" name="n_email" class="ci-input" maxlength="150" placeholder="Correo (opcional)" autocomplete="off" value="<?= htmlspecialchars($ciPrev('n_email')) ?>">
                     </div>
                     <label class="ci-hd">
-                        <input type="checkbox" name="n_habeas_data" value="1" data-req>
+                        <input type="checkbox" name="n_habeas_data" value="1" data-req <?= $ciPrev('n_habeas_data') === '1' ? 'checked' : '' ?>>
                         <span>El huésped autoriza el tratamiento de sus datos conforme a la <a href="<?= BASE_URL ?>/politica-datos.php<?= volverDesdeAqui() ?>" target="_blank" rel="noopener">Política de Datos</a> (Ley 1581 de 2012).</span>
                     </label>
                 </div>
@@ -605,7 +626,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <select name="huesped_id" id="huesped_ci" class="ci-select">
                         <option value="">Seleccionar huésped...</option>
                         <?php foreach($huespedes as $h): ?>
-                            <option value="<?= $h['id'] ?>"><?= htmlspecialchars($h['apellidos'] . ', ' . $h['nombres'] . ' (' . descifrar($h['documento_num']) . ')') ?></option>
+                            <option value="<?= $h['id'] ?>" <?= ($ciPrev('huesped_id') !== '' && $ciPrev('huesped_id') === (string) $h['id']) ? 'selected' : '' ?>><?= htmlspecialchars($h['apellidos'] . ', ' . $h['nombres'] . ' (' . descifrar($h['documento_num']) . ')') ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -616,7 +637,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <select name="habitacion_id" id="hab_ci" class="ci-select" required onchange="ciHabitacionCambiada()">
                     <option value="">Seleccionar habitación...</option>
                     <?php foreach($habDisponibles as $hab): ?>
-                        <option value="<?= $hab['id'] ?>"
+                        <option value="<?= $hab['id'] ?>" <?= ($ciPrev('habitacion_id') !== '' && $ciPrev('habitacion_id') === (string) $hab['id']) ? 'selected' : '' ?>
                                 data-tipo="<?= htmlspecialchars($hab['tipo'] ?? '', ENT_QUOTES) ?>"
                                 data-tarifa1="<?= $hab['tarifa_1'] !== null ? (int)$hab['tarifa_1'] : '' ?>"
                                 data-tarifa2="<?= $hab['tarifa_2'] !== null ? (int)$hab['tarifa_2'] : '' ?>"
@@ -649,7 +670,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <i class="fas fa-circle-exclamation"></i> <span id="ci-precio-aviso-txt"></span>
             </div>
 
-            <?php renderIvaExento(); ?>
+            <?php renderIvaExento($ciConservar ? ['iva_exento' => $ciPrev('iva_exento'), 'pasaporte_num' => $ciPrev('pasaporte_num'), 'sello_migratorio' => $ciPrev('sello_migratorio')] : []); ?>
 
             <button type="submit" class="ci-submit"><i class="fas fa-door-open"></i> Registrar entrada</button>
         </form>
@@ -752,7 +773,21 @@ require_once __DIR__ . '/../../includes/header.php';
             document.getElementById('tab-nu').classList.toggle('on', m === 'nuevo');
             document.getElementById('tab-ex').classList.toggle('on', m === 'existente');
         }
-        setModo('nuevo');
+        setModo(<?= json_encode($ciModoInicial) ?>);
+        <?php if ($ciConservar && $ciPrev('habitacion_id') !== ''): ?>
+        // Tras un ingreso que no se pudo registrar: el menú de personas lo arma el navegador al elegir la habitación, así que se
+        // vuelve a armar y se deja en lo que se había elegido (y, si era «Más de 8…», con su número).
+        (function(){
+            var sel = document.getElementById('ci_pax'), mas = document.getElementById('ci_pax_mas');
+            ciHabitacionCambiada();
+            var pax = <?= json_encode($ciPrev('num_personas')) ?>, otras = <?= json_encode($ciPrev('num_personas_mas')) ?>;
+            if (pax !== '' && [].some.call(sel.options, function(o){ return o.value === pax; })) {
+                sel.value = pax;
+                if (pax === 'mas' && otras !== '') mas.value = otras;
+                ciPaxCambiado();
+            }
+        })();
+        <?php endif; ?>
         </script>
     </div>
 </div>

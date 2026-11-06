@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/cifrado.php';
 require_once __DIR__ . '/../../includes/disponibilidad.php';
 require_once __DIR__ . '/../../includes/tarifas.php';        // el precio lo manda el tipo
+require_once __DIR__ . '/../../includes/validacion.php';     // validarMonto: el abono es un entero de pesos
 requireLogin();
 
 $pdo = getDB();
@@ -29,11 +30,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $horaLlegada  = trim($_POST['hora_llegada'] ?? '');
             $horaVal      = preg_match('/^\d{2}:\d{2}$/', $horaLlegada) ? $horaLlegada : null;
             $notas        = trim($_POST['notas'] ?? '');
-            $abonoReserva = max(0, (float)str_replace(',', '.', $_POST['abono_reserva'] ?? '0'));
+            // 4.2.4: un entero de pesos (0 si no hay abono). Antes (float): un texto daba 0 en silencio y «1e6» un millón.
+            $abonoCrudo  = trim((string) ($_POST['abono_reserva'] ?? ''));
+            $abonoReserva = $abonoCrudo === '' ? 0 : validarMonto($abonoCrudo, 0);
             $metodoAbono  = $_POST['metodo_abono'] ?? '';
 
             // Validar fechas
-            if ($fechaEntrada >= $fechaSalida) {
+            if ($abonoReserva === null) {
+                $msg = 'El abono debe ser un número entero de pesos (0 si no hay), sin letras ni decimales.';
+                $msgType = 'danger';
+            } elseif ($fechaEntrada >= $fechaSalida) {
                 $msg = 'La fecha de salida debe ser posterior a la de entrada.';
                 $msgType = 'danger';
             } elseif ($fechaEntrada < date('Y-m-d')) {
@@ -503,7 +509,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="rs-row2">
                 <div class="rs-field">
                     <label for="abono_reserva"><i class="fas fa-hand-holding-dollar"></i> Abono de reserva (COP)</label>
-                    <input type="number" name="abono_reserva" id="abono_reserva" class="rs-input" min="0" step="1" value="0" inputmode="numeric">
+                    <input type="number" name="abono_reserva" id="abono_reserva" class="rs-input" min="0" step="1" value="0" inputmode="numeric" data-solo="digitos">
                 </div>
                 <div class="rs-field">
                     <label for="metodo_abono"><i class="fas fa-wallet"></i> Medio del abono</label>

@@ -5,6 +5,7 @@ $pageTitle = 'Facturación';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/cifrado.php';
+require_once __DIR__ . '/../../includes/validacion.php';   // validarTelefono, validarDocumentoTipo
 requireAdmin();
 
 $pdo = getDB();
@@ -80,7 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'emiti
         $documento = preg_replace('/\s+/', '', trim($_POST['documento_num'] ?? ''));
         $nombres = trim($_POST['nombres'] ?? '');
         $apellidos = trim($_POST['apellidos'] ?? '');
-        $nit = preg_replace('/\D+/', '', $_POST['nit'] ?? '');
+        $nitCrudo = trim((string) ($_POST['nit'] ?? ''));
+        $nit = preg_replace('/\D+/', '', $nitCrudo);   // se admiten puntos, guiones y espacios al teclear (900.123.456-7); las LETRAS se rechazan más abajo
         $dv = trim($_POST['nit_dv'] ?? '');
         $razonSocial = trim($_POST['razon_social'] ?? '');
         $stay = $pdo->prepare("select estado, total_pagar from estancias where id=?");
@@ -97,15 +99,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'emiti
         if ($dup->fetchColumn()) $errores[] = 'Esta cuenta ya tiene una factura vigente. Anúlala primero si necesitas corregirla.';
         if (!in_array($tipo, ['natural', 'juridica'], true)) $errores[] = 'Selecciona persona natural o jurídica.';
         if ($direccion === '' || $telefono === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL)) $errores[] = 'Completa dirección, teléfono y un correo válido.';
+        // 4.2.3: el teléfono solo lleva números (y + - paréntesis): antes se guardaba cualquier texto.
+        elseif (validarTelefono($telefono) === null) $errores[] = 'El teléfono no es válido: solo números (mínimo 7), y puede llevar +, - y paréntesis.';
 
         if ($tipo === 'natural') {
             if (!in_array($documentoTipo, ['CC', 'CE', 'TI', 'RC', 'PAS'], true) || $documento === '' || $nombres === '' || $apellidos === '') {
                 $errores[] = 'Para persona natural indica tipo y número de documento, nombres y apellidos.';
             }
+            // La cédula, la de extranjería, la tarjeta y el registro civil son solo números; el pasaporte lleva letras.
+            $documentoNorm = validarDocumentoTipo($documentoTipo, $documento);
+            if ($documento !== '' && $documentoNorm === null) {
+                $errores[] = $documentoTipo === 'PAS'
+                    ? 'El pasaporte solo puede llevar letras y números (entre 3 y 30 caracteres).'
+                    : 'El número de documento solo puede llevar números (entre 3 y 20), sin letras.';
+            } elseif ($documentoNorm !== null) {
+                $documento = $documentoNorm;
+            }
             $razonSocial = trim($nombres . ' ' . $apellidos);
             $nit = ''; $dv = '';
         } elseif ($tipo === 'juridica') {
-            if (!preg_match('/^\d{5,15}$/', $nit) || !preg_match('/^\d$/', $dv) || $razonSocial === '') {
+            if (preg_match('/[^\d.\-\s]/', $nitCrudo)) {
+                $errores[] = 'El NIT solo puede llevar números, sin letras.';
+            } elseif (!preg_match('/^\d{5,15}$/', $nit) || !preg_match('/^\d$/', $dv) || $razonSocial === '') {
                 $errores[] = 'Para persona jurídica indica razón social, NIT y dígito de verificación.';
             }
             $documentoTipo = ''; $documento = '';
@@ -245,14 +260,14 @@ require_once __DIR__ . '/../../includes/header.php';
          los datos del huésped nuevo. */ ?><select id="estancia_id" name="estancia_id" required onchange="if(this.value) location.search='?estancia='+encodeURIComponent(this.value);"><option value="">Selecciona una cuenta sin facturar...</option><?php foreach($pendientes as $p): ?><option value="<?= (int)$p['id'] ?>" <?= $seleccion===(int)$p['id']?'selected':'' ?>>Estancia #<?= (int)$p['id'] ?> · Hab. <?= htmlspecialchars($p['habitacion']) ?> · <?= htmlspecialchars($p['nombres'].' '.$p['apellidos']) ?> · <?= date('d/m/Y',strtotime($p['fecha_checkout'])) ?> · $<?= number_format($p['total_pagar'],0,',','.') ?></option><?php endforeach; ?></select></div>
                 <div class="fc-field fc-span"><label>Tipo de receptor *</label><div class="fc-toggle"><label><input type="radio" name="tipo_receptor" value="natural" checked> Persona natural</label><label><input type="radio" name="tipo_receptor" value="juridica"> Persona jurídica</label></div></div>
                 <div class="fc-field natural"><label>Tipo de documento *</label><select name="documento_tipo"><?php foreach (['CC'=>'Cédula de ciudadanía','CE'=>'Cédula de extranjería','TI'=>'Tarjeta de identidad','RC'=>'Registro civil','PAS'=>'Pasaporte'] as $k=>$etiquetaDoc): ?><option value="<?= $k ?>"<?= $receptor['documento_tipo']===$k?' selected':'' ?>><?= $etiquetaDoc ?></option><?php endforeach; ?></select></div>
-                <div class="fc-field natural"><label>Número de documento *</label><input name="documento_num" maxlength="40" autocomplete="off" value="<?= htmlspecialchars($receptor['documento_num']) ?>"></div>
+                <div class="fc-field natural"><label>Número de documento *</label><input name="documento_num" maxlength="30" autocomplete="off" inputmode="numeric" data-solo="documento" data-tipo-en="documento_tipo" value="<?= htmlspecialchars($receptor['documento_num']) ?>"></div>
                 <div class="fc-field natural"><label>Nombres *</label><input name="nombres" maxlength="90" value="<?= htmlspecialchars($receptor['nombres']) ?>"></div>
                 <div class="fc-field natural"><label>Apellidos *</label><input name="apellidos" maxlength="90" value="<?= htmlspecialchars($receptor['apellidos']) ?>"></div>
-                <div class="fc-field juridica" hidden><label>NIT *</label><input name="nit" inputmode="numeric" maxlength="15" disabled></div>
-                <div class="fc-field juridica" hidden><label>Dígito de verificación *</label><input name="nit_dv" inputmode="numeric" maxlength="1" disabled></div>
+                <div class="fc-field juridica" hidden><label>NIT *</label><input name="nit" inputmode="numeric" maxlength="15" data-solo="digitos" disabled></div>
+                <div class="fc-field juridica" hidden><label>Dígito de verificación *</label><input name="nit_dv" inputmode="numeric" maxlength="1" data-solo="digitos" disabled></div>
                 <div class="fc-field fc-span juridica" hidden><label>Razón social *</label><input name="razon_social" maxlength="180" disabled></div>
                 <div class="fc-field"><label>Dirección *</label><input name="direccion" maxlength="200" required></div>
-                <div class="fc-field"><label>Teléfono *</label><input name="telefono" maxlength="40" required value="<?= htmlspecialchars($receptor['telefono']) ?>"></div>
+                <div class="fc-field"><label>Teléfono *</label><input name="telefono" maxlength="20" required data-solo="telefono" value="<?= htmlspecialchars($receptor['telefono']) ?>"></div>
                 <div class="fc-field fc-span"><label>Correo electrónico *</label><input type="email" name="correo" maxlength="180" required value="<?= htmlspecialchars($receptor['correo']) ?>"></div>
             </div>
             <button class="fc-submit" type="submit"><i class="fas fa-stamp"></i> Emitir factura interna</button>

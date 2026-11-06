@@ -7,6 +7,7 @@ $pageTitle = 'Dashboard';
 // Al revés no falla —se salta los cuatro controles en silencio—.
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/validacion.php';   // validarMonto: el monto de un pago es un entero de pesos
 require_once __DIR__ . '/includes/cifrado.php';   // descifrar teléfono de deudores
 define('CASA_BOSQUE', true);
 require_once __DIR__ . '/includes/notificaciones.php';
@@ -56,9 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'revis
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'pagar_deuda') {
     if (validateCsrf()) {
         $estId  = (int)($_POST['estancia_id'] ?? 0);
-        $monto  = round((float)($_POST['monto'] ?? 0));
+        // 4.2.4: un entero de pesos y nada más. Antes (float): «12abc» cobraba 12 y «1e999» cobraba la deuda entera.
+        $monto  = validarMonto($_POST['monto'] ?? '', 1);
         $metodo = in_array(($_POST['metodo'] ?? ''), ['efectivo','tarjeta','transferencia','nequi','otro'], true) ? $_POST['metodo'] : 'efectivo';
-        if ($estId > 0 && $monto > 0) {
+        if ($estId > 0 && $monto === null) {
+            // Antes un monto inválido se descartaba SIN decir nada y parecía que el pago había entrado.
+            setFlash('El monto del pago debe ser un número entero de pesos mayor a cero, sin letras (por ejemplo 50000). No se registró nada.', 'danger');
+        } elseif ($estId > 0) {
             // ── Transacción ANTES de leer, con la estancia bloqueada ──
             // Antes el saldo se calculaba fuera de la transacción y el
             // `update` no llevaba condición. Dos cobros simultáneos del mismo
@@ -83,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'pagar
                 $deuda = $e ? ((float)$e['total_pagar'] - (float)$e['total_abonado']) : 0.0;
                 if (!$e || $deuda <= 0) {
                     $pdo->rollBack();
+                    setFlash('No se registró el pago: esa deuda ya estaba saldada.', 'warning');
                 } else {
                     $abono = min($monto, $deuda);   // no cobrar más que lo que debe
 
@@ -97,10 +103,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'pagar
 
                     if ($upd->rowCount() !== 1) {
                         $pdo->rollBack();
+                        setFlash('No se registró el pago: la deuda cambió mientras se registraba. Revísala e intenta de nuevo.', 'warning');
                     } else {
                         $pdo->prepare("insert into pagos (estancia_id, monto, metodo, nota, usuario_id) values (?, ?, ?, 'Pago de deuda posterior al check-out', ?)")
                             ->execute([$estId, $abono, $metodo, getCurrentUserId()]);
                         $pdo->commit();
+                        setFlash('Pago de deuda registrado: $' . number_format($abono, 0, ',', '.') . ' COP.', 'success');
                         if (function_exists('registrarAuditoria')) {
                             registrarAuditoria($pdo, 'estancias', $estId, 'pago_deuda', "Pago de deuda \$" . (int)$abono . " ($metodo)");
                         }
@@ -116,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'pagar
     exit;
 }
 
+$flash = getFlash();   // el resultado del pago de la deuda (lo muestra el pie de página como notificación)
 require_once __DIR__ . '/includes/header.php';
 
 // ── Huéspedes que quedaron debiendo (check-out con saldo pendiente) ──────────
@@ -548,7 +557,7 @@ $totalHuespedes = $pdo->query("
             <input type="hidden" name="estancia_id" id="pago-estancia">
             <div style="font-size:.85rem;color:#6E6054;margin-bottom:12px;">Debe <b id="pago-saldo-txt" style="color:#c0392b;"></b>. Puedes cobrar el total o un abono.</div>
             <label style="display:block;font-size:.74rem;font-weight:600;color:#6E6054;margin-bottom:6px;">Monto a registrar (COP)</label>
-            <input type="number" name="monto" id="pago-monto" min="1" step="1" required style="width:100%;padding:12px 13px;border:1px solid #E7E2D8;border-radius:11px;font-family:inherit;font-size:1rem;margin-bottom:14px;box-sizing:border-box;">
+            <input type="number" name="monto" id="pago-monto" min="1" step="1" data-solo="digitos" required style="width:100%;padding:12px 13px;border:1px solid #E7E2D8;border-radius:11px;font-family:inherit;font-size:1rem;margin-bottom:14px;box-sizing:border-box;">
             <label style="display:block;font-size:.74rem;font-weight:600;color:#6E6054;margin-bottom:8px;">Método</label>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;">
                 <label style="display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid #E7E2D8;border-radius:11px;font-size:.85rem;font-weight:600;color:#334155;cursor:pointer;"><input type="radio" name="metodo" value="efectivo" checked style="accent-color:#6B4420;"> Efectivo</label>
