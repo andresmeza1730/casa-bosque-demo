@@ -17,6 +17,7 @@ requireAdmin();   // exportar la base de clientes es exclusivo del admin
 // (Descarga directa por GET: al confirmar, el navegador vuelve aquí y la
 // descarga arranca.) Ver includes/equipos.php.
 require_once __DIR__ . '/../../includes/equipos.php';
+require_once __DIR__ . '/../../includes/csv.php';   // celdaCsv: el nombre, el correo y la ciudad los tecleó una persona
 exigirCodigoEnAccionCritica();
 
 $pdo = getDB();
@@ -60,11 +61,13 @@ foreach ($huespedes as $h) {
     fputcsv($salida, [
         $h['documento_tipo'],
         descifrar($h['documento_num']),
-        $h['nombres'],
-        $h['apellidos'],
+        // 4.3.2: lo que tecleó una persona pasa por celdaCsv(): un nombre «=HYPERLINK(...)» se ejecutaba como fórmula al abrir el archivo en Excel.
+        // El documento y el teléfono ya vienen validados (solo números y + - paréntesis), y el tipo es fijo.
+        celdaCsv($h['nombres']),
+        celdaCsv($h['apellidos']),
         descifrar($h['telefono']),
-        $h['email'],
-        $h['ciudad_origen'],
+        celdaCsv($h['email']),
+        celdaCsv($h['ciudad_origen']),
     ], ';');
 }
 

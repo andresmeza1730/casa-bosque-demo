@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/validacion.php';   // validarMonto, validarEntero (montos que se teclean)
 require_once __DIR__ . '/../../includes/tarifas.php';
+require_once __DIR__ . '/../../includes/disponibilidad.php';   // bloquearHabitacion()
 require_once __DIR__ . '/../../includes/fotos_habitacion.php';   // la foto de cada habitación que sube el hotel
 // Aquí se fijan las tarifas y la capacidad de TODO el hotel, y se crean y retiran
 // habitaciones. El menú (modules/menu.php, grupo «El hotel») ya la reserva al
@@ -99,6 +100,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && !empty($_SERVER['C
                         $tipoId = (int)$pdo->lastInsertId();
                         $accionAuditoria = 'crear_tipo';
                     } else {
+                        // 4.3.2: el tipo tiene que existir. Con un id falso el `update` no tocaba nada y la pantalla decía «guardado» y dejaba una
+                        // auditoría de algo que no pasó. Se lee con `for update`, así tampoco puede desaparecer entre la comprobación y la escritura.
+                        $stTipoExiste = $pdo->prepare("select id from tipos_habitacion where id = ? for update");
+                        $stTipoExiste->execute([$tipoId]);
+                        if (!$stTipoExiste->fetchColumn()) {
+                            $pdo->rollBack();
+                            $msg = 'Ese tipo de habitación no existe.';
+                            $msgType = 'danger';
+                            throw new RuntimeException('tipo_inexistente');
+                        }
                         $pdo->prepare("update tipos_habitacion set nombre=?, descripcion=?, capacidad_max=?, tarifa_base=?, tarifa_1=?, tarifa_2=?, tarifa_extra=? where id=?")
                             ->execute([$nombre, $descripcion ?: null, $capacidad, $tarifaBase, $tarifa1, $tarifa2, $tarifaExtra, $tipoId]);
                         $accionAuditoria = 'editar_tipo';
@@ -120,8 +131,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && !empty($_SERVER['C
                     $msgType = 'success';
                 } catch (Throwable $e) {
                     if ($pdo->inTransaction()) $pdo->rollBack();
-                    $msg = 'No se pudo guardar el tipo. Verifica que el nombre no esté repetido.';
-                    $msgType = 'danger';
+                    if ($e->getMessage() !== 'tipo_inexistente') {   // ese caso ya dejó su propio mensaje arriba
+                        $msg = 'No se pudo guardar el tipo. Verifica que el nombre no esté repetido.';
+                        $msgType = 'danger';
+                    }
                 }
             }
         }
@@ -178,13 +191,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && !empty($_SERVER['C
                     $msg = "Ya existe otra habitación configurada con el número \"$numero\".";
                     $msgType = 'warning';
                 } else {
-                    $antesHab = auditoriaFila($pdo, 'habitaciones', $habId);
-                    $stmt = $pdo->prepare("update habitaciones set numero = ?, piso = ?, tipo_id = ?, capacidad_max = ?, tarifa = ?, notas = ? where id = ?");
-                    $stmt->execute([$numero, $piso, $tipoId, $tipoData['capacidad_max'], $tipoData['tarifa_base'], $notas ?: null, $habId]);
-                    registrarAuditoria($pdo, 'habitaciones', $habId, 'editar', "Datos actualizados: Hab. $numero",
-                        $antesHab, auditoriaFila($pdo, 'habitaciones', $habId));
-                    $msg = "Habitación \"$numero\" actualizada correctamente.";
-                    $msgType = 'success';
+                    // 4.3.2: con transacción y bloqueo de la habitación (como el cambio de estado, el check-in y las reservas). Antes: la habitación
+                    // podía no existir y la pantalla decía «actualizada» con su auditoría (un `update` sin filas no es un error); y se podía cambiar
+                    // el TIPO de una habitación con un huésped dentro, que le cambia la capacidad y el recargo por persona adicional en plena estadía.
+                    try {
+                        $pdo->beginTransaction();
+                        $habEditar = bloquearHabitacion($pdo, $habId);
+                        if ($habEditar === null) {
+                            $pdo->rollBack();
+                            $msg = 'La habitación solicitada no existe.';
+                            $msgType = 'danger';
+                        } else {
+                            $stTipoAct = $pdo->prepare("select tipo_id from habitaciones where id = ?");
+                            $stTipoAct->execute([$habId]);
+                            $tipoActual = (int) $stTipoAct->fetchColumn();
+                            $stHosp = $pdo->prepare("select count(*) from estancias where habitacion_id = ? and estado = 'activa'");
+                            $stHosp->execute([$habId]);
+                            if ($tipoActual !== $tipoId && (int) $stHosp->fetchColumn() > 0) {
+                                $pdo->rollBack();
+                                $msg = 'Esa habitación tiene un huésped hospedado: no se le puede cambiar el tipo hasta el check-out. Puedes cambiar el número, el piso y las notas.';
+                                $msgType = 'danger';
+                            } else {
+                                $antesHab = auditoriaFila($pdo, 'habitaciones', $habId);
+                                $stmt = $pdo->prepare("update habitaciones set numero = ?, piso = ?, tipo_id = ?, capacidad_max = ?, tarifa = ?, notas = ? where id = ?");
+                                $stmt->execute([$numero, $piso, $tipoId, $tipoData['capacidad_max'], $tipoData['tarifa_base'], $notas ?: null, $habId]);
+                                $pdo->commit();
+                                registrarAuditoria($pdo, 'habitaciones', $habId, 'editar', "Datos actualizados: Hab. $numero",
+                                    $antesHab, auditoriaFila($pdo, 'habitaciones', $habId));
+                                $msg = "Habitación \"$numero\" actualizada correctamente.";
+                                $msgType = 'success';
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        if ($pdo->inTransaction()) $pdo->rollBack();
+                        error_log('Habitaciones: no se pudo editar: ' . $e->getMessage());
+                        $msg = 'No se pudo guardar la habitación. Vuelve a intentarlo.';
+                        $msgType = 'danger';
+                    }
                 }
             }
         }
@@ -311,30 +354,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && !empty($_SERVER['C
         }
 
         // CAMBIAR ESTADO OPERATIVO
+        // 4.3.2: con transacción y bloqueo de la habitación, como el check-in y las reservas (includes/disponibilidad.php). Antes se leía si había una
+        // estancia activa y se actualizaba DESPUÉS, sin bloquear nada: un check-in que entrara en medio dejaba la habitación 'disponible' con un huésped
+        // dentro. Tampoco se comprobaba que la habitación existiera: con un id falso decía «actualizado» y dejaba la auditoría de algo que no pasó.
         if ($action === 'cambiar_estado') {
-            $habId          = (int)$_POST['habitacion_id'];
-            $nuevoEstado    = $_POST['nuevo_estado'];
-            $estadosValidos = ['disponible', 'ocupada', 'limpieza', 'mantenimiento'];
+            $habId          = (int)($_POST['habitacion_id'] ?? 0);
+            $nuevoEstado    = (string) ($_POST['nuevo_estado'] ?? '');
+            // 4.3.2: «ocupada» NO se elige a mano. Una habitación está ocupada porque hay una estancia activa (la pone el check-in y la quita el
+            // check-out); ponerla a mano la dejaba bloqueada sin que nadie estuviera dentro, y la pantalla no ofrece esa opción: solo un POST escrito
+            // a mano la mandaba. Salir de «ocupada» sin estancia (una habitación que quedó mal) sí se puede: eso es destrabar, no ocupar.
+            $estadosValidos = ['disponible', 'limpieza', 'mantenimiento'];
 
-            if (in_array($nuevoEstado, $estadosValidos)) {
-                // Integridad: si la habitación tiene un huésped hospedado, no se
-                // puede cambiar el estado a mano aquí (se libera con el check-out).
-                $stmtAct = $pdo->prepare("select count(*) from estancias where habitacion_id = ? and estado = 'activa'");
-                $stmtAct->execute([$habId]);
-                if ($stmtAct->fetchColumn() > 0) {
-                    $msg = 'Esa habitación tiene un huésped hospedado. Para liberarla haz el Check-out.';
+            if ($nuevoEstado === 'ocupada') {
+                $msg = 'Una habitación pasa a ocupada con un check-in, no a mano.';
+                $msgType = 'danger';
+            } elseif (!in_array($nuevoEstado, $estadosValidos, true)) {
+                $msg = 'Ese estado no es válido.';
+                $msgType = 'danger';
+            } else {
+                try {
+                    $pdo->beginTransaction();
+                    $habBloq = bloquearHabitacion($pdo, $habId);   // devuelve el estado YA bloqueado, o null si no existe
+
+                    if ($habBloq === null) {
+                        $pdo->rollBack();
+                        $msg = 'La habitación solicitada no existe.';
+                        $msgType = 'danger';
+                    } else {
+                        // Integridad: si la habitación tiene un huésped hospedado, no se puede cambiar el estado a mano aquí (se libera con el
+                        // check-out). Se mira con la habitación ya bloqueada.
+                        $stmtAct = $pdo->prepare("select count(*) from estancias where habitacion_id = ? and estado = 'activa'");
+                        $stmtAct->execute([$habId]);
+                        $oldEstado = (string) $habBloq['estado'];
+
+                        if ((int) $stmtAct->fetchColumn() > 0) {
+                            $pdo->rollBack();
+                            $msg = 'Esa habitación tiene un huésped hospedado. Para liberarla haz el Check-out.';
+                            $msgType = 'danger';
+                        } elseif ($oldEstado === $nuevoEstado) {
+                            $pdo->rollBack();
+                            $msg = 'La habitación ya estaba en ese estado.';
+                            $msgType = 'warning';
+                        } else {
+                            $antesHab = auditoriaFila($pdo, 'habitaciones', $habId);
+                            // Con el estado esperado en el `where` y rowCount: si cambió entre el bloqueo y el update, no se escribe nada.
+                            $stmtUp = $pdo->prepare("update habitaciones set estado = ? where id = ? and estado = ?");
+                            $stmtUp->execute([$nuevoEstado, $habId, $oldEstado]);
+                            if ($stmtUp->rowCount() !== 1) {
+                                $pdo->rollBack();
+                                $msg = 'La habitación cambió mientras se actualizaba. Recarga la página e inténtalo de nuevo.';
+                                $msgType = 'danger';
+                            } else {
+                                $pdo->commit();
+                                // La auditoría va DESPUÉS del commit: es un registro, no parte del cambio, y no debe alargar el bloqueo.
+                                registrarAuditoria($pdo, 'habitaciones', $habId, 'cambio_estado', "Estado: $oldEstado → $nuevoEstado",
+                                    $antesHab, auditoriaFila($pdo, 'habitaciones', $habId));
+                                $msg = "Estado de la habitación actualizado con éxito.";
+                                $msgType = 'success';
+                            }
+                        }
+                    }
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    error_log('Habitaciones: no se pudo cambiar el estado: ' . $e->getMessage());
+                    $msg = 'No se pudo cambiar el estado. Vuelve a intentarlo.';
                     $msgType = 'danger';
-                } else {
-                    $stmtOld = $pdo->prepare("select estado from habitaciones where id = ?");
-                    $stmtOld->execute([$habId]);
-                    $oldEstado = $stmtOld->fetchColumn();
-
-                    $antesHab = auditoriaFila($pdo, 'habitaciones', $habId);
-                    $pdo->prepare("update habitaciones set estado = ? where id = ?")->execute([$nuevoEstado, $habId]);
-                    registrarAuditoria($pdo, 'habitaciones', $habId, 'cambio_estado', "Estado: $oldEstado → $nuevoEstado",
-                        $antesHab, auditoriaFila($pdo, 'habitaciones', $habId));
-                    $msg = "Estado de la habitación actualizado con éxito.";
-                    $msgType = 'success';
                 }
             }
         }

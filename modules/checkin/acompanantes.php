@@ -89,7 +89,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $apellidos = limpiarTexto($_POST['apellidos'] ?? '', 100);
             $docTipo   = $_POST['documento_tipo'] ?? 'CC';
             $docNum    = trim((string) ($_POST['documento_num'] ?? ''));
-            $fechaNac  = trim($_POST['fecha_nacimiento'] ?? '');
+            // 4.3.2: la fecha de nacimiento se lee con validarFecha(). Antes una fecha que no se entendía («abc», «2026-02-31») o vacía hacía que
+            // esMenorDeEdad() devolviera false y el menor quedara registrado COMO ADULTO: sin pedir con quién viaja, sin la notaría y sin los
+            // documentos del check-in. Ahora una fecha rara se rechaza y un registro civil o una tarjeta de identidad (que son de menores) la exige.
+            $fechaNacCruda = trim($_POST['fecha_nacimiento'] ?? '');
+            $fechaNac      = $fechaNacCruda === '' ? '' : (string) validarFecha($fechaNacCruda);   // '' si no hay o no es una fecha real: abajo se distingue
             $nacion    = limpiarTexto($_POST['nacionalidad'] ?? 'COLOMBIA', 60) ?: 'COLOMBIA';
             $parent    = limpiarTexto($_POST['parentesco'] ?? '', 40);
 
@@ -111,6 +115,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($nombres === '' || $apellidos === '') {
                 $msg = 'El nombre y los apellidos son obligatorios.'; $msgType = 'danger';
+            } elseif ($fechaNacCruda !== '' && $fechaNac === '') {
+                $msg = 'La fecha de nacimiento no es una fecha válida (año-mes-día).'; $msgType = 'danger';
+            } elseif ($fechaNac !== '' && ($fechaNac > date('Y-m-d') || $fechaNac < '1900-01-01')) {
+                $msg = 'La fecha de nacimiento no puede ser futura ni anterior a 1900.'; $msgType = 'danger';
+            } elseif ($fechaNac === '') {
+                // 4.3.2: la fecha de nacimiento es de todos. Sin ella esMenorDeEdad() no puede saber si es un menor, y un menor quedaba registrado como
+                // adulto: sin pedir con quién viaja ni la notaría. Antes solo se exigía con registro civil o tarjeta de identidad; una cédula con
+                // fecha en blanco (o un menor con un documento de adulto) se pasaba.
+                $msg = 'Indica la fecha de nacimiento del acompañante: el sistema la usa para saber si es menor de edad.'; $msgType = 'danger';
             } elseif ($docNum !== '' && validarDocumentoTipo($docTipo, $docNum) === null) {
                 // 4.2.3: el documento del acompañante, según su tipo (CC, CE, TI y RC solo números; PAS con letras).
                 $msg = $docTipo === 'PAS'
@@ -172,11 +185,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($accion === 'quitar') {
             // Solo mientras la reserva no haya entrado: después forma parte
             // del registro de la estadía y no se toca.
+            // 4.3.2: se lee ANTES de borrar quién era, para que la auditoría diga a quién se quitó (y si era un MENOR): el registro no se puede
+            // editar y el alta ya guardaba el nombre; la baja decía solo «un acompañante». Quién lo hizo y cuándo lo guarda la propia auditoría.
+            $acompId = (int) ($_POST['acomp_id'] ?? 0);
+            $stQuien = $pdo->prepare("select nombres, apellidos, es_menor from acompanantes where id = ? and reserva_id = ? and estancia_id is null");
+            $stQuien->execute([$acompId, $reservaId]);
+            $quien = $stQuien->fetch(PDO::FETCH_ASSOC);
             $st = $pdo->prepare("delete from acompanantes where id = ? and reserva_id = ? and estancia_id is null");
-            $st->execute([(int) ($_POST['acomp_id'] ?? 0), $reservaId]);
+            $st->execute([$acompId, $reservaId]);
             if ($st->rowCount() > 0) {
                 registrarAuditoria($pdo, 'acompanantes', $reservaId, 'quitar_acompanante',
-                    'Quitó un acompañante de la reserva #' . $reservaId);
+                    ($quien && (int) $quien['es_menor'] === 1 ? 'Quitó a un MENOR' : 'Quitó a un acompañante')
+                    . ($quien ? ': ' . $quien['nombres'] . ' ' . $quien['apellidos'] : '')
+                    . ' (acompañante #' . $acompId . ') de la reserva #' . $reservaId);
                 $msg = 'Acompañante retirado.'; $msgType = 'success';
             } else {
                 $msg = 'No se pudo retirar: la estadía ya está registrada.'; $msgType = 'warning';
@@ -370,7 +391,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
                 <div class="pc-grid">
                     <div class="pc-f"><label for="ac-fn">Fecha de nacimiento</label>
-                        <input type="date" id="ac-fn" name="fecha_nacimiento" max="<?= date('Y-m-d') ?>">
+                        <input type="date" id="ac-fn" name="fecha_nacimiento" max="<?= date('Y-m-d') ?>" required>
                         <p class="pc-nota" style="margin:5px 0 0;">Si es menor de 18, el sistema lo detecta solo y pide los datos de ley.</p></div>
                     <div class="pc-f"><label for="ac-pa">Parentesco con el titular</label>
                         <input type="text" id="ac-pa" name="parentesco" maxlength="40" placeholder="Hijo, cónyuge, sobrino…"></div>

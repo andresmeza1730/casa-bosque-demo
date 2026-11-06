@@ -93,6 +93,7 @@ header('Content-Disposition: attachment; filename="' . $nombreArchivo . '"');
 header('Pragma: no-cache');
 header('Expires: 0');
 
+require_once __DIR__ . '/../../includes/csv.php';   // celdaCsv, para el nombre del empleado (las cifras NO pasan por ahí)
 $salida = fopen('php://output', 'w');
 fprintf($salida, chr(0xEF) . chr(0xBB) . chr(0xBF)); // BOM UTF-8
 
@@ -135,7 +136,7 @@ fputcsv($salida, [], ';');
 fputcsv($salida, ['Ingresos por empleado'], ';');
 fputcsv($salida, ['Empleado', 'Check-outs', 'Hospedaje', 'Consumos', 'Total cerrado'], ';');
 foreach ($porUsuario as $u) {
-    fputcsv($salida, [$u['nombre'], $u['checkouts'], $u['hospedaje'], $u['consumos'], $u['total']], ';');
+    fputcsv($salida, [celdaCsv($u['nombre']), $u['checkouts'], $u['hospedaje'], $u['consumos'], $u['total']], ';');   // el nombre lo escribió un administrador: texto, no fórmula
 }
 
 fclose($salida);

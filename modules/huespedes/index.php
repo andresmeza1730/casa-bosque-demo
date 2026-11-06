@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/validacion.php';
 require_once __DIR__ . '/../../includes/cifrado.php';
 require_once __DIR__ . '/../../includes/retencion.php';
+require_once __DIR__ . '/../../includes/equipos.php';   // exigirCodigoEnAccionCritica(): eliminar y anonimizar piden el código (4.3.2)
 require_once __DIR__ . '/../../includes/busqueda.php';   // el texto buscado no va por la URL
 requireLogin();
 
@@ -146,6 +147,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = 'Acceso denegado: Solo los administradores pueden eliminar huéspedes.';
                 $msgType = 'danger';
             } else {
+            // 4.3.2: borrar a un huésped es irreversible: aunque el equipo esté recordado, aquí se pide el código (includes/equipos.php). Si
+            // hay que pedirlo, se vuelve a esta pantalla y se repite la acción.
+            exigirCodigoEnAccionCritica();
             $id = (int)($_POST['id'] ?? 0);
 
             $checkRes = $pdo->prepare("select count(*) from reservas where huesped_id = ?");
@@ -192,8 +196,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = 'Acceso denegado: solo los administradores pueden ejecutar el borrado seguro.';
                 $msgType = 'danger';
             } else {
+                // 4.3.2: el borrado seguro tampoco se hace sin el código (aunque el equipo esté recordado): suprime la identidad para siempre.
+                exigirCodigoEnAccionCritica();
                 $id = (int)($_POST['id'] ?? 0);
-                if ($id > 0 && anonimizarHuesped($pdo, $id)) {
+                if ($id > 0 && huespedAlojadoAhora($pdo, $id)) {
+                    // 4.3.2: no se anonimiza a quien está hospedado: el check-out, el folio y la factura necesitan su identidad.
+                    $msg = 'Ese huésped está hospedado ahora. Haz primero el check-out y después el borrado seguro.';
+                    $msgType = 'danger';
+                } elseif ($id > 0 && anonimizarHuesped($pdo, $id)) {
                     registrarAuditoria($pdo, 'huespedes', $id, 'anonimizar', 'Borrado seguro de datos personales (derecho de supresión / retención)');
                     $msg = 'Datos personales del huésped anonimizados de forma segura. El historial se conservó sin identidad.';
                     $msgType = 'success';

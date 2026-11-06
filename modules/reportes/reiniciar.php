@@ -69,9 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Intentos de acceso y sesiones (se borran en AMBOS modos). Son rastro
             // operativo, no el registro de auditoría.
             //
-            // Borrar `sesiones_activas` no echa a quien está haciendo el reinicio:
-            // sesionVigente() (includes/sesiones.php) no encuentra la fila, la
-            // vuelve a registrar y sigue. Está escrito para eso.
+            // Borrar `sesiones_activas` echa a TODAS las demás sesiones (a propósito: no hay
+            // constancia de que sigan vigentes: sesionVigente() ya no «adopta» una sesión
+            // que estuvo registrada y perdió su fila, 4.3.2) y NO a quien hace el reinicio:
+            // más abajo se vuelve a registrar su sesión. Antes se confiaba en que
+            // sesionVigente() la adoptara sola, y eso mismo dejaba volver a valer a una
+            // sesión cerrada a mano o vencida.
             //
             // `equipos_confiables` son los equipos donde se marcó «recordar este
             // equipo» (includes/equipos.php). Quien tenga una de esas cookies entra
@@ -132,6 +135,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
             } catch (Exception $e) {}
+
+            // La sesión de quien acaba de reiniciar vuelve a quedar registrada (la tabla se vació arriba).
+            if (function_exists('sesionRegistrar')) { sesionRegistrar($pdo, (int) getCurrentUserId()); }
 
             // Tras un reinicio PARCIAL no queda ninguna reserva/estancia, así que
             // ninguna habitación debería seguir 'ocupada'/'limpieza': las liberamos

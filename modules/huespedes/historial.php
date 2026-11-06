@@ -14,6 +14,8 @@
 $pageTitle = 'Historial de huéspedes';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/equipos.php';   // exigirCodigoEnAccionCritica() al reabrir una cuenta (4.3.2)
+require_once __DIR__ . '/../../includes/disponibilidad.php';   // bloquearHabitacion(): reabrir pide el mismo candado que el check-in (4.3.2)
 require_once __DIR__ . '/../../includes/cifrado.php';
 require_once __DIR__ . '/../../includes/noches.php';
 require_once __DIR__ . '/../../includes/busqueda.php';  // el texto buscado no va por la URL
@@ -49,57 +51,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reabr
     } elseif (!isAdmin()) {
         $msg = 'Solo un administrador puede reabrir una cuenta cerrada.'; $msgType = 'danger';
     } else {
+        // 4.3.2: reabrir una cuenta cerrada mueve dinero y el estado de una habitación: aunque el equipo esté recordado, aquí se pide el código
+        // (includes/equipos.php). Si hay que pedirlo, se vuelve a esta pantalla y se repite la acción.
+        exigirCodigoEnAccionCritica();
         $estId  = (int) ($_POST['estancia_id'] ?? 0);
         $motivo = trim($_POST['motivo'] ?? '');
 
-        $e = $pdo->prepare("select e.estado, e.habitacion_id, h.numero, h.estado as hab_estado
-                            from estancias e join habitaciones h on h.id = e.habitacion_id
-                            where e.id = ?");
-        $e->execute([$estId]);
-        $est = $e->fetch(PDO::FETCH_ASSOC);
-
-        // Si hay factura vigente, primero hay que anularla: de otro modo
-        // quedaría una factura emitida sobre una cuenta que va a cambiar.
-        $fv = $pdo->prepare("select numero from facturas where estancia_id = ? and estado = 'emitida' limit 1");
-        $fv->execute([$estId]);
-        $facturaViva = $fv->fetchColumn();
-
-        $otra = $pdo->prepare("select count(*) from estancias where habitacion_id = ? and estado = 'activa'");
-
+        // 4.3.2: se reabre con la misma disciplina que el check-in y el check-out (las carreras del dinero y de las habitaciones).
+        // Antes se leía todo FUERA de la transacción y el `update` de la habitación no miraba nada: entre la lectura y la escritura podía entrar
+        // otro huésped a esa habitación (dos estancias activas en el mismo cuarto), o anularse/emitirse una factura, o reabrirla otro administrador
+        // a la vez. Ahora: transacción → se bloquea la habitación (el mismo candado que pide el check-in) → se lee la estancia bloqueada y se
+        // revalida TODO dentro → se escribe con el estado esperado en el `where` y se mira rowCount → commit → auditoría DESPUÉS.
+        $msg = ''; $msgType = '';
         if (mb_strlen($motivo) < 10) {
             $msg = 'Escribe el motivo por el que se reabre la cuenta (al menos 10 caracteres).'; $msgType = 'danger';
-        } elseif (!$est) {
-            $msg = 'No se encontró esa estancia.'; $msgType = 'danger';
-        } elseif ($est['estado'] !== 'cerrada') {
-            $msg = 'Esa cuenta no está cerrada.'; $msgType = 'warning';
-        } elseif ($facturaViva) {
-            $msg = "Esta cuenta tiene la factura $facturaViva vigente. Anúlala primero en Facturación y vuelve a intentarlo.";
-            $msgType = 'danger';
         } else {
-            $otra->execute([$est['habitacion_id']]);
-            if ((int) $otra->fetchColumn() > 0) {
-                // Ya entró otro huésped a esa habitación: reabrir dejaría
-                // dos estancias activas en el mismo cuarto.
-                $msg = 'La habitación ' . $est['numero'] . ' ya tiene otro huésped hospedado. No se puede reabrir esta cuenta.';
-                $msgType = 'danger';
-            } else {
-                try {
-                    $pdo->beginTransaction();
-                    $pdo->prepare("update estancias set estado = 'activa', fecha_checkout = null,
-                                   usuario_checkout = null where id = ? and estado = 'cerrada'")->execute([$estId]);
-                    $pdo->prepare("update habitaciones set estado = 'ocupada' where id = ?")->execute([$est['habitacion_id']]);
-                    $pdo->commit();
+            try {
+                $pdo->beginTransaction();
 
-                    registrarAuditoria($pdo, 'estancias', $estId, 'reabrir_cuenta',
-                        'Reabrió la cuenta cerrada (hab. ' . $est['numero'] . '). Motivo: ' . mb_substr($motivo, 0, 200));
-
-                    $msg = 'Cuenta reabierta. Corrige lo que haga falta y vuelve a cerrarla en Check-out.';
-                    $msgType = 'success';
-                } catch (Throwable $ex) {
-                    if ($pdo->inTransaction()) $pdo->rollBack();
-                    error_log('Reabrir cuenta: ' . $ex->getMessage());
-                    $msg = 'No se pudo reabrir la cuenta.'; $msgType = 'danger';
+                $e = $pdo->prepare("select habitacion_id from estancias where id = ?");
+                $e->execute([$estId]);
+                $habIdEst = $e->fetchColumn();
+                $est = false;
+                if ($habIdEst !== false) {
+                    // Orden de candados igual que el check-in: primero la habitación, después la estancia.
+                    bloquearHabitacion($pdo, (int) $habIdEst);
+                    $e = $pdo->prepare("select e.estado, e.habitacion_id, h.numero
+                                        from estancias e join habitaciones h on h.id = e.habitacion_id
+                                        where e.id = ? for update");
+                    $e->execute([$estId]);
+                    $est = $e->fetch(PDO::FETCH_ASSOC);
                 }
+
+                if (!$est) {
+                    $pdo->rollBack();
+                    $msg = 'No se encontró esa estancia.'; $msgType = 'danger';
+                } elseif ($est['estado'] !== 'cerrada') {
+                    $pdo->rollBack();
+                    $msg = 'Esa cuenta no está cerrada.'; $msgType = 'warning';
+                } else {
+                    // Si hay factura vigente, primero hay que anularla: de otro modo quedaría una factura emitida sobre una cuenta que va a cambiar.
+                    $fv = $pdo->prepare("select numero from facturas where estancia_id = ? and estado = 'emitida' limit 1 for update");
+                    $fv->execute([$estId]);
+                    $facturaViva = $fv->fetchColumn();
+
+                    $otra = $pdo->prepare("select count(*) from estancias where habitacion_id = ? and estado = 'activa'");
+                    $otra->execute([$est['habitacion_id']]);
+
+                    if ($facturaViva) {
+                        $pdo->rollBack();
+                        $msg = "Esta cuenta tiene la factura $facturaViva vigente. Anúlala primero en Facturación y vuelve a intentarlo.";
+                        $msgType = 'danger';
+                    } elseif ((int) $otra->fetchColumn() > 0) {
+                        // Ya entró otro huésped a esa habitación: reabrir dejaría dos estancias activas en el mismo cuarto.
+                        $pdo->rollBack();
+                        $msg = 'La habitación ' . $est['numero'] . ' ya tiene otro huésped hospedado. No se puede reabrir esta cuenta.';
+                        $msgType = 'danger';
+                    } else {
+                        $stRe = $pdo->prepare("update estancias set estado = 'activa', fecha_checkout = null,
+                                               usuario_checkout = null where id = ? and estado = 'cerrada'");
+                        $stRe->execute([$estId]);
+                        if ($stRe->rowCount() !== 1) {
+                            $pdo->rollBack();
+                            $msg = 'Esa cuenta cambió mientras la reabrías. Revisa su estado y vuelve a intentarlo.'; $msgType = 'warning';
+                        } else {
+                            $pdo->prepare("update habitaciones set estado = 'ocupada' where id = ?")->execute([$est['habitacion_id']]);
+                            $pdo->commit();
+
+                            registrarAuditoria($pdo, 'estancias', $estId, 'reabrir_cuenta',
+                                'Reabrió la cuenta cerrada (hab. ' . $est['numero'] . '). Motivo: ' . mb_substr($motivo, 0, 200));
+
+                            $msg = 'Cuenta reabierta. Corrige lo que haga falta y vuelve a cerrarla en Check-out.';
+                            $msgType = 'success';
+                        }
+                    }
+                }
+            } catch (Throwable $ex) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Reabrir cuenta: ' . $ex->getMessage());
+                $msg = 'No se pudo reabrir la cuenta.'; $msgType = 'danger';
             }
         }
     }

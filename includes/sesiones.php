@@ -94,6 +94,10 @@ function sesionRegistrar(PDO $pdo, int $usuarioId): void {
                            motivo_cierre = null")
             ->execute([$usuarioId, $hash, _sesionIp(), _sesionAgente()]);
         $_SESSION['sesion_tocada'] = time();
+        // La marca de «esta sesión ya estuvo registrada»: sin ella, una sesión a la que le BORRARON la fila (el reinicio de datos vacía la tabla)
+        // era indistinguible de una anterior a la instalación, y sesionVigente() la adoptaba de nuevo: una sesión que un administrador había cerrado
+        // a mano, o que había vencido, volvía a valer mientras su archivo de sesión siguiera vivo. Ver sesionVigente().
+        $_SESSION['sesion_registrada'] = 1;
     } catch (Throwable $e) {
         error_log('Sesiones: no se pudo registrar la sesión: ' . $e->getMessage());
     }
@@ -131,7 +135,14 @@ function sesionVigente(PDO $pdo, int $usuarioId, ?string &$motivo = null): bool 
         $fila = $s->fetch();
 
         if (!$fila) {
-            // Sesión anterior a la instalación: se adopta.
+            // Una sesión que YA estuvo registrada y ya no tiene fila no es «anterior a la instalación»: le borraron el registro (el reinicio de
+            // datos, o una restauración de la base) y no hay constancia de que siga vigente. No se adopta: se corta (4.3.2). El reinicio vuelve a
+            // registrar la sesión de quien lo hace, así que a esa persona no la echa.
+            if (!empty($_SESSION['sesion_registrada'])) {
+                $motivo = 'sin_registro';
+                return false;
+            }
+            // Sesión anterior a la instalación (nunca estuvo registrada): se adopta.
             sesionRegistrar($pdo, $usuarioId);
             return true;
         }
@@ -145,7 +156,13 @@ function sesionVigente(PDO $pdo, int $usuarioId, ?string &$motivo = null): bool 
             } catch (Throwable $e) { /* el corte no depende de poder anotarlo */ }
             return false;
         }
-        return $fila['cerrada_en'] === null;
+        if ($fila['cerrada_en'] === null) {
+            // Una sesión que ya estaba abierta ANTES de esta versión no trae la marca (sesionRegistrar() no la había puesto): se le pone aquí, la
+            // primera vez que se ve con su fila, para que cuente desde ya como «registrada» y no se adopte de nuevo si le borran la fila.
+            $_SESSION['sesion_registrada'] = 1;
+            return true;
+        }
+        return false;
 
     } catch (Throwable $e) {
         error_log('Sesiones: no se pudo comprobar la sesión: ' . $e->getMessage());

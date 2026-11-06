@@ -36,33 +36,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'anula
             $msg = 'Escribe el motivo de la anulación (al menos 10 caracteres).';
             $msgType = 'danger';
         } else {
-            $f = $pdo->prepare("select numero, estado, estancia_id from facturas where id = ?");
-            $f->execute([$facturaId]);
-            $factura = $f->fetch();
+            // 4.3.2: con transacción, la factura LEÍDA BLOQUEADA y el update con el estado esperado y rowCount. Antes se leía el estado fuera de toda
+            // transacción y el update no comprobaba si había tocado algo: dos anulaciones a la vez dejaban DOS auditorías de «anulada» para una sola
+            // factura, y una que llegaba tarde decía «anulada» aunque ya lo estuviera.
+            try {
+                $pdo->beginTransaction();
+                $f = $pdo->prepare("select numero, estado, estancia_id from facturas where id = ? for update");
+                $f->execute([$facturaId]);
+                $factura = $f->fetch();
 
-            if (!$factura) {
-                $msg = 'No se encontró esa factura.'; $msgType = 'danger';
-            } elseif ($factura['estado'] === 'anulada') {
-                $msg = 'Esa factura ya estaba anulada.'; $msgType = 'warning';
-            } else {
-                try {
+                if (!$factura) {
+                    $pdo->rollBack();
+                    $msg = 'No se encontró esa factura.'; $msgType = 'danger';
+                } elseif ($factura['estado'] === 'anulada') {
+                    $pdo->rollBack();
+                    $msg = 'Esa factura ya estaba anulada.'; $msgType = 'warning';
+                } else {
                     $antesFactura = auditoriaFila($pdo, 'facturas', $facturaId);
-                    $pdo->prepare("update facturas
-                                   set estado = 'anulada', anulada_en = now(),
-                                       anulada_por = ?, motivo_anulacion = ?
-                                   where id = ? and estado = 'emitida'")
-                        ->execute([getCurrentUserId(), mb_substr($motivo, 0, 300), $facturaId]);
+                    $stAn = $pdo->prepare("update facturas
+                                           set estado = 'anulada', anulada_en = now(),
+                                               anulada_por = ?, motivo_anulacion = ?
+                                           where id = ? and estado = 'emitida'");
+                    $stAn->execute([getCurrentUserId(), mb_substr($motivo, 0, 300), $facturaId]);
+                    if ($stAn->rowCount() !== 1) {
+                        $pdo->rollBack();
+                        $msg = 'Esa factura ya estaba anulada.'; $msgType = 'warning';
+                    } else {
+                        $pdo->commit();
+                        // La auditoría va DESPUÉS del commit: es un registro, no parte de la anulación.
+                        registrarAuditoria($pdo, 'facturas', $facturaId, 'anular',
+                            "Factura {$factura['numero']} anulada (estancia #{$factura['estancia_id']}). Motivo: " . mb_substr($motivo, 0, 180),
+                            $antesFactura, auditoriaFila($pdo, 'facturas', $facturaId));
 
-                    registrarAuditoria($pdo, 'facturas', $facturaId, 'anular',
-                        "Factura {$factura['numero']} anulada (estancia #{$factura['estancia_id']}). Motivo: " . mb_substr($motivo, 0, 180),
-                        $antesFactura, auditoriaFila($pdo, 'facturas', $facturaId));
-
-                    $msg = "Factura {$factura['numero']} anulada. La cuenta vuelve a estar disponible para facturar.";
-                    $msgType = 'success';
-                } catch (Throwable $e) {
-                    error_log('Anular factura: ' . $e->getMessage());
-                    $msg = 'No se pudo anular la factura.'; $msgType = 'danger';
+                        $msg = "Factura {$factura['numero']} anulada. La cuenta vuelve a estar disponible para facturar.";
+                        $msgType = 'success';
+                    }
                 }
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Anular factura: ' . $e->getMessage());
+                $msg = 'No se pudo anular la factura.'; $msgType = 'danger';
             }
         }
     }
@@ -133,9 +146,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'emiti
         } else {
             try {
                 $pdo->beginTransaction();
+                // La secuencia se lee `for update`: es el candado de TODA emisión, así que lo que se revalida a continuación no puede cambiar hasta el
+                // commit. 4.3.2: antes «¿está cerrada?» y «¿ya tiene factura vigente?» se miraban ARRIBA, fuera de la transacción, y dos emisiones a
+                // la vez para la misma cuenta podían pasar las dos y dejar DOS facturas vigentes (cada una con su consecutivo).
                 $seq = $pdo->query("select ultimo from secuencias_factura where id=1 for update");
                 $consecutivo = (int)$seq->fetchColumn() + 1;
                 if ($consecutivo < 1) throw new RuntimeException('No se encontró la secuencia de facturación.');
+                $stEdentro = $pdo->prepare("select estado, total_pagar from estancias where id = ? for update");
+                $stEdentro->execute([$estanciaId]);
+                $estDentro = $stEdentro->fetch();
+                $stDup = $pdo->prepare("select id from facturas where estancia_id = ? and estado = 'emitida'");
+                $stDup->execute([$estanciaId]);
+                if (!$estDentro || $estDentro['estado'] !== 'cerrada') {
+                    $pdo->rollBack();
+                    $msg = 'Solo se puede facturar una cuenta cerrada.';
+                    $msgType = 'danger';
+                } elseif ($stDup->fetchColumn()) {
+                    $pdo->rollBack();
+                    $msg = 'Esta cuenta ya tiene una factura vigente. Anúlala primero si necesitas corregirla.';
+                    $msgType = 'danger';
+                } else {
+                $estancia['total_pagar'] = $estDentro['total_pagar'];   // el total de AHORA, no el que se leyó antes de bloquear
                 $numero = 'CBF-' . str_pad((string)$consecutivo, 7, '0', STR_PAD_LEFT);
                 $pdo->prepare("update secuencias_factura set ultimo=? where id=1")->execute([$consecutivo]);
                 $stmt = $pdo->prepare("insert into facturas (estancia_id, numero, tipo_receptor, documento_tipo, documento_num, razon_social, nit, nit_dv, direccion, telefono, correo, total, usuario_id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -152,6 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'emiti
                 $msgType = 'success';
                 // El enlace «Abrir factura» viaja con la notificación (includes/mensajes.php lo valida: solo caminos del sistema).
                 $msgAccion = ['texto' => 'Abrir factura', 'href' => BASE_URL . '/modules/checkout/factura_pdf.php?factura=' . $facturaCreada . '&volver=facturacion'];
+                }   // (fin de «revalidado dentro del candado»)
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
                 $msg = 'No se pudo emitir la factura. Revisa si la cuenta ya fue facturada.';

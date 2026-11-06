@@ -72,15 +72,9 @@ if ($formato === 'json') {
     exit;
 }
 
-/**
- * Una celda de CSV a salvo: una celda que empieza con = + - @ la ejecuta Excel como
- * fórmula, y el detalle de la auditoría lleva texto que escribió otra persona (el
- * correo tecleado en un acceso fallido, por ejemplo).
- */
-function celdaCsv($valor): string {
-    $s = (string) $valor;
-    return ($s !== '' && strpos("=+-@\t\r", $s[0]) !== false) ? "'" . $s : $s;
-}
+// celdaCsv() —una celda que empieza con = + - @ la ejecuta Excel como fórmula, y el detalle de la auditoría lleva texto que escribió otra persona—
+// vive desde 4.3.2 en includes/csv.php, que también usan la exportación de huéspedes y la de ingresos.
+require_once __DIR__ . '/../../includes/csv.php';
 
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $folio . '.csv"');

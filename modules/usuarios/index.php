@@ -27,6 +27,13 @@ $msg = '';
 $msgType = '';
 $miId = (int)getCurrentUserId();
 
+/** ¿Existe ese usuario? (4.3.2) */
+function usuarioExiste(PDO $pdo, int $id): bool {
+    $st = $pdo->prepare("select count(*) from usuarios where id = ?");
+    $st->execute([$id]);
+    return (int) $st->fetchColumn() > 0;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateCsrf()) {
         $msg = 'Token de seguridad inválido. Intente de nuevo.';
@@ -76,6 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // ── Editar datos (nombre, email, rol) ──
+        // 4.3.2: el usuario tiene que EXISTIR. Con un id falso `editar`, `toggle_activo` y `reset_pass` decían «actualizado» o «restablecida»
+        // sin haber tocado a nadie, y dejaban su fila en la auditoría.
         if ($action === 'editar') {
             $id     = (int)($_POST['usuario_id'] ?? 0);
             $nombre = trim($_POST['nombre'] ?? '');
@@ -84,6 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($id <= 0 || $nombre === '' || $email === '') {
                 $msg = 'Datos incompletos para editar.';
+                $msgType = 'danger';
+            } elseif (!usuarioExiste($pdo, $id)) {
+                $msg = 'Ese usuario no existe.';
                 $msgType = 'danger';
             } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $msg = 'El correo no tiene un formato válido.';
@@ -138,6 +150,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($id === $miId) {
                 $msg = 'No puedes desactivar tu propia cuenta.';
                 $msgType = 'danger';
+            } elseif (!usuarioExiste($pdo, $id)) {
+                $msg = 'Ese usuario no existe.';
+                $msgType = 'danger';
             } else {
                 $antesUsuario = auditoriaFila($pdo, 'usuarios', $id);
                 $stmt = $pdo->prepare("update usuarios set activo = case when activo = 1 then 0 else 1 end where id = ?");
@@ -173,8 +188,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id      = (int)($_POST['usuario_id'] ?? 0);
             $nueva   = $_POST['password'] ?? '';
             $errorPass = validarPassword($nueva);
-            if ($id <= 0) {
-                $msg = 'Usuario inválido.';
+            if ($id <= 0 || !usuarioExiste($pdo, $id)) {
+                $msg = $id <= 0 ? 'Usuario inválido.' : 'Ese usuario no existe.';
                 $msgType = 'danger';
             } elseif ($errorPass !== null) {
                 $msg = $errorPass;

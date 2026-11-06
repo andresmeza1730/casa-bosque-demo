@@ -243,10 +243,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // ── Guardar/editar la nota de una reserva (admin y recepción) ──
         if ($action === 'guardar_nota') {
-            $reservaId = (int)$_POST['reserva_id'];
+            $reservaId = (int)($_POST['reserva_id'] ?? 0);
             $nuevaNota = trim($_POST['notas'] ?? '');
+            // 4.3.2: la reserva tiene que existir. Antes el update no tocaba nada si el id era falso, pero igual se registraba la auditoría y se
+            // decía «nota actualizada»: un mensaje falso y una fila de auditoría de algo que no pasó.
+            $stExiste = $pdo->prepare("select count(*) from reservas where id = ?");
+            $stExiste->execute([$reservaId]);
             if (mb_strlen($nuevaNota) > 1000) {
                 $msg = 'La nota es demasiado larga (máx. 1000 caracteres).';
+                $msgType = 'danger';
+            } elseif ((int) $stExiste->fetchColumn() === 0) {
+                $msg = 'La reserva no existe.';
                 $msgType = 'danger';
             } else {
                 $stmt = $pdo->prepare("update reservas set notas = ? where id = ?");

@@ -19,6 +19,16 @@ require_once __DIR__ . '/cifrado.php';
  * anonimizado. Deja rastro en auditoría (si se pasa un usuario válido
  * vía las funciones de auth, que ya usa registrarAuditoria).
  */
+/**
+ * ¿Está hospedado ahora (una estancia activa)? (4.3.2) El borrado seguro no procede mientras dure la estadía: el check-out, el folio y la factura
+ * necesitan su identidad, y quedaría «ANONIMIZADO» en medio de la cuenta. Primero el check-out.
+ */
+function huespedAlojadoAhora(PDO $pdo, int $id): bool {
+    $st = $pdo->prepare("select count(*) from estancias where huesped_id = ? and estado = 'activa'");
+    $st->execute([$id]);
+    return (int) $st->fetchColumn() > 0;
+}
+
 function anonimizarHuesped(PDO $pdo, int $id): bool {
     // Token único e irreversible en lugar del documento real. Se cifra
     // igual (para mantener el formato de la columna) pero no identifica.

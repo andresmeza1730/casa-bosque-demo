@@ -80,6 +80,11 @@ const EQUIPO_RUTAS_CRITICAS = [
     '/modules/reportes/reiniciar.php',
     '/modules/usuarios/index.php',
     '/modules/huespedes/huespedes_exportar.php',
+    // 4.3.2: pantallas que SIGUEN siendo de uso diario (la recepcionista también las usa), con acciones críticas de administrador dentro:
+    // eliminar y anonimizar un huésped, y reabrir una cuenta. Ahí el código se pide al ejecutar la acción, no al abrir la pantalla; la ruta
+    // está en esta lista para que, tras confirmar el código, se pueda VOLVER a ella (la lista es también la de destinos permitidos).
+    '/modules/huespedes/index.php',
+    '/modules/huespedes/historial.php',
 ];
 
 /**
@@ -391,7 +396,7 @@ function exigirCodigoEnAccionCritica(): void {
             require_once __DIR__ . '/modulo_retirado.php';
             moduloRetirado('Esta acción',
                 'No está disponible en la demostración: sin verificación en dos pasos no se permiten el '
-                . 'respaldo, el reinicio de datos, la exportación de huéspedes ni la gestión de usuarios.');
+                . 'respaldo, el reinicio de datos, la exportación de huéspedes, la gestión de usuarios, el borrado de huéspedes ni la reapertura de cuentas.');
         }
         return;
     }
