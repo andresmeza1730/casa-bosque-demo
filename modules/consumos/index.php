@@ -283,6 +283,8 @@ require_once __DIR__ . '/../../includes/header.php';
 .cs-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 /* 4.2.0: el producto (y el botón) a todo el ancho. En dos columnas el selector medía ~150 px y se leía «Seleccionar prod…». */
 .cs-row2 > .cs-span2 { grid-column: 1 / -1; }
+/* 5.0.1: en pantallas anchas, el producto y el botón de la venta de mostrador ocupan UNA columna: el menú desplegable copia el ancho del selector (no se puede limitar por separado). */
+@media (min-width: 1200px) { .cs-row2 > .cs-span2.cs-ancho-media { grid-column: auto; } }
 .cs-row2 > .cs-field { min-width: 0; }
 
 .cs-preview { display: none; margin-top: 4px; margin-bottom: 14px; background: var(--cb-primary-light,#F5EBDC); border: 1px solid rgba(107,68,32,.2); border-radius: 13px; padding: 13px 15px; align-items: center; justify-content: space-between; }
@@ -351,9 +353,17 @@ require_once __DIR__ . '/../../includes/header.php';
         <?php else: ?>
             <form method="post" class="cs-row2">
                 <?= csrfField() ?><input type="hidden" name="action" value="venta_mostrador">
+                <?php if (count($categoriasFiltro) >= 2): ?>
                 <div class="cs-field cs-span2">
-                    <label for="venta-producto">Producto</label>
+                    <label>Categoría</label>
                     <?php csFiltroCategorias('venta-producto', $categoriasFiltro); ?>
+                </div>
+                <?php endif; ?>
+                <?php /* 5.0.1: en pantallas ANCHAS el producto va en UNA columna (junto a la cantidad), no en las dos: el menú desplegable del navegador copia el ancho del selector, y con la
+                         fila entera ocupaba toda la pantalla (1470 px) y tapaba la página. En celular y tableta sigue ocupando la fila (la cuadrícula es de dos columnas y quedaría
+                         de 160 px). Las categorías van aparte, arriba, en su propia fila. */ ?>
+                <div class="cs-field cs-span2 cs-ancho-media">
+                    <label for="venta-producto">Producto</label>
                     <select class="cs-select" id="venta-producto" name="producto_id" required>
                         <option value="">Seleccionar producto...</option>
                         <?php /* Agrupado por categoría (la consulta ya viene ordenada por ella): así cada opción es «nombre · $precio» y no se corta. */ ?>
@@ -377,7 +387,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option><option value="nequi">Nequi</option>
                     </select>
                 </div>
-                <div class="cs-field cs-span2" style="align-self:end;"><button class="cs-submit" type="submit" <?= !$restauranteAbierto ? 'disabled title="Disponible de 8:00 a 20:00"' : '' ?>><i class="fas fa-check"></i> Registrar venta pagada</button></div>
+                <div class="cs-field cs-span2 cs-ancho-media" style="align-self:end;"><button class="cs-submit" type="submit" <?= !$restauranteAbierto ? 'disabled title="Disponible de 8:00 a 20:00"' : '' ?>><i class="fas fa-check"></i> Registrar venta pagada</button></div>
             </form>
         <?php endif; ?>
     </div>

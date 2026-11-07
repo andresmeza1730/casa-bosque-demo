@@ -2,7 +2,7 @@
 
 **Sistema Integral de Gestión Hotelera** del Hotel Casa Bosque (Cartagena de Indias): huéspedes, reservas, check-in, consumos,
 check-out, facturas, caja y auditoría, con dos roles (administrador y recepcionista). PHP 8.3 + MariaDB, sin framework.
-Proyecto integrador de las **Unidades Tecnológicas de Santander**. Versión **5.0.0**. Los datos de las capturas son ficticios.
+Proyecto integrador de las **Unidades Tecnológicas de Santander**. Versión **5.0.1**. Los datos de las capturas son ficticios.
 
 ---
 
