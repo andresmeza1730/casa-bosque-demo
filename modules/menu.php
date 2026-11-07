@@ -33,6 +33,7 @@ if ($esAdmin) {
         ],
         'El dinero' => [
             ['/modules/huespedes/ficha.php',      'fa-magnifying-glass-dollar', 'Estado de cuenta',  false],
+            ['/modules/deudores/index.php',       'fa-hand-holding-dollar',     'Deudores',          false],
             ['/modules/facturacion/index.php',   'fa-file-invoice-dollar',      'Facturación',       false],
             ['/modules/reportes/caja.php',       'fa-cash-register',            'Arqueo de Caja',    false],
             ['/dashboard.php',                   'fa-chart-pie',                'Resumen',           false],
@@ -66,6 +67,7 @@ if ($esAdmin) {
     $grupos = [
         'Operaciones' => [
             ['/modules/huespedes/ficha.php',   'fa-magnifying-glass-dollar', 'Estado de cuenta', false],
+            ['/modules/deudores/index.php',    'fa-hand-holding-dollar',     'Deudores',         false],
             ['/modules/huespedes/index.php',   'fa-users',                   'Huéspedes',        false],
             ['/modules/huespedes/historial.php','fa-clock-rotate-left',      'Historial',        false],
             ['/modules/reservas/index.php',    'fa-calendar-check',          'Reservas',         false],

@@ -171,7 +171,7 @@ require_once __DIR__ . '/mantenimiento.php';   // modo mantenimiento (si el flag
 // Version del sistema. Se sube a mano al publicar, y la etiqueta de git
 // del mismo numero es la que manda: APP_VERSION solo sirve para poder
 // preguntarle al hotel que version tiene abierta cuando reporte un fallo.
-define('APP_VERSION', '4.3.2');
+define('APP_VERSION', '5.0.0');
 
 define('BASE_URL', '');
 

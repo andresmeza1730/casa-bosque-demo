@@ -2,7 +2,7 @@
 
 **Sistema Integral de Gestión Hotelera** del Hotel Casa Bosque (Cartagena de Indias): huéspedes, reservas, check-in, consumos,
 check-out, facturas, caja y auditoría, con dos roles (administrador y recepcionista). PHP 8.3 + MariaDB, sin framework.
-Proyecto integrador de las **Unidades Tecnológicas de Santander**. Versión **4.2.2**. Los datos de las capturas son ficticios.
+Proyecto integrador de las **Unidades Tecnológicas de Santander**. Versión **5.0.0**. Los datos de las capturas son ficticios.
 
 ---
 
@@ -72,15 +72,15 @@ El `.env` (credenciales y claves de cifrado) **no** está en el repositorio: se 
 
 ## Base de datos
 
-MariaDB / MySQL, **21 tablas**, 30 llaves foráneas y 2 disparadores que vuelven inmutable el registro de auditoría.
+MariaDB / MySQL, **22 tablas**, 30 llaves foráneas y 2 disparadores que vuelven inmutable el registro de auditoría.
 
 | Grupo | Tablas |
 |---|---|
 | **Hospedaje** | `tipos_habitacion`, `habitaciones`, `huespedes`, `acompanantes`, `reservas`, `estancias` |
-| **Dinero** | `consumos`, `productos`, `ventas_mostrador`, `pagos`, `facturas`, `facturas_electronicas`, `secuencias_factura` |
+| **Dinero** | `consumos`, `productos`, `categorias_producto`, `ventas_mostrador`, `pagos`, `facturas`, `facturas_electronicas`, `secuencias_factura` |
 | **Acceso y seguridad** | `usuarios`, `sesiones_activas`, `equipos_confiables`, `intentos_login`, `intentos_huesped`, `auditoria` |
 
-El diagrama de más abajo muestra las 21 tablas.
+El diagrama de más abajo muestra 21 de las 22 tablas: no incluye `categorias_producto` (las categorías de la carta, desde la versión 5.0.0), que se relaciona con `productos` por su clave.
 
 Archivos en [`base-de-datos/`](base-de-datos):
 
@@ -92,7 +92,7 @@ Archivos en [`base-de-datos/`](base-de-datos):
 
 ### Diagrama entidad-relación
 
-Las 21 tablas con sus columnas, `PK` / `FK` / `UK` y las relaciones de las llaves foráneas.
+Las 21 tablas anteriores a la versión 5.0.0, con sus columnas, `PK` / `FK` / `UK` y las relaciones de las llaves foráneas.
 
 ![Diagrama entidad-relación](base-de-datos/3-diagrama-entidad-relacion.png)
 

@@ -94,12 +94,32 @@ create table if not exists habitaciones (
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
 
 
+-- Las categorías de la Carta (5.0.0): se crean, renombran y desactivan desde «Carta y Restaurante».
+-- `clave` es lo que guarda cada producto y no cambia al renombrar; el horario del restaurante se apoya en la clave «restaurante».
+create table if not exists categorias_producto (
+  id         int auto_increment primary key,
+  clave      varchar(40) not null,
+  nombre     varchar(40) not null,
+  activa     tinyint(1) not null default 1,
+  orden      int not null default 100,
+  created_at datetime default current_timestamp,
+  unique key uk_categoria_clave (clave),
+  unique key uk_categoria_nombre (nombre)
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
+insert ignore into categorias_producto (clave, nombre, orden) values
+  ('snack',       'Tienda · Mecato',  10),
+  ('bebida',      'Tienda · Bebidas', 20),
+  ('servicio',    'Servicios',        30),
+  ('restaurante', 'Restaurante',      40),
+  ('otro',        'Otros',            50);
+
 create table if not exists productos (
   id          int auto_increment primary key,
   nombre      varchar(100) not null,
   descripcion varchar(200) null,
   precio      decimal(12,2) not null,
-  categoria   enum('snack','bebida','servicio','restaurante','otro') not null default 'otro',
+  categoria   varchar(40) not null default 'otro',   -- la `clave` de categorias_producto (antes de 5.0.0 era un ENUM)
   activo      tinyint(1) not null default 1,
   created_at  datetime default current_timestamp
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;

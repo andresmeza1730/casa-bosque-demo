@@ -555,7 +555,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="rs-row2">
                 <div class="rs-field">
                     <label for="abono_reserva"><i class="fas fa-hand-holding-dollar"></i> Abono de reserva (COP)</label>
-                    <input type="number" name="abono_reserva" id="abono_reserva" class="rs-input" min="0" step="1" value="0" inputmode="numeric" data-solo="digitos">
+                    <input type="text" name="abono_reserva" id="abono_reserva" class="rs-input" min="0" value="0" inputmode="numeric" autocomplete="off" data-solo="moneda">
                 </div>
                 <div class="rs-field">
                     <label for="metodo_abono"><i class="fas fa-wallet"></i> Medio del abono</label>
@@ -1023,15 +1023,17 @@ function actualizarAbonoReserva() {
     if (nuevo) {
         depositInput.min = String(tarifa);
         depositInput.required = true;
-        if (Number(depositInput.value || 0) < tarifa) depositInput.value = String(tarifa);
+        if (CBDinero.leer(depositInput) < tarifa) CBDinero.poner(depositInput, tarifa);
+        CBDinero.revalidar(depositInput);   // el campo es de texto: el mínimo lo exige campos-numericos.js, y hay que volver a mirarlo al cambiarlo
         depositHint.textContent = 'Huésped nuevo: abono mínimo de primera noche ' + new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(tarifa) + '. Si no se presenta, el abono cubre ese cargo.';
     } else {
         depositInput.min = '0';
         depositInput.required = false;
-        if (Number(depositInput.value || 0) === 0) depositMethod.value = '';
+        CBDinero.revalidar(depositInput);
+        if (CBDinero.leer(depositInput) === 0) depositMethod.value = '';
         depositHint.textContent = 'Los huéspedes conocidos pueden reservar sin abono. Si registras uno, selecciona el medio de pago.';
     }
-    depositMethod.required = nuevo || Number(depositInput.value || 0) > 0;
+    depositMethod.required = nuevo || CBDinero.leer(depositInput) > 0;
 }
 guestSelect.addEventListener('change', actualizarAbonoReserva);
 // La habitación ya dispara rsHabitacionCambiada() por su onchange, y esa llama

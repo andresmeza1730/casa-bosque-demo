@@ -749,7 +749,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <input type="hidden" name="estancia_id" id="pgEstancia" value="">
             <div class="pg-field">
                 <label for="pgMonto">Monto a pagar (COP)</label>
-                <input type="number" name="monto" id="pgMonto" class="pg-input" min="1" step="1" inputmode="numeric" data-solo="digitos" placeholder="0" required oninput="pgChequear()">
+                <input type="text" name="monto" id="pgMonto" class="pg-input" min="1" inputmode="numeric" autocomplete="off" data-solo="moneda" placeholder="0" required oninput="pgChequear()">
                 <div id="pgWarn" style="display:none; margin-top:8px; font-size:.78rem; color:#b45309; background:#fff3e8; border:1px solid rgba(249,115,22,.28); border-radius:10px; padding:9px 11px;">
                     <i class="fas fa-triangle-exclamation"></i> <span id="pgWarnTxt"></span>
                 </div>
@@ -828,13 +828,13 @@ function abrirPago(estanciaId, saldo) {
     __pgSaldo = saldo || 0;
     document.getElementById('pgEstancia').value = estanciaId;
     var m = document.getElementById('pgMonto');
-    m.value = (__pgSaldo > 0) ? __pgSaldo : '';
+    CBDinero.poner(m, (__pgSaldo > 0) ? __pgSaldo : '');   // con sus puntos de miles
     pgChequear();
     document.getElementById('pgOverlay').classList.add('active');
     setTimeout(function(){ try { m.focus(); m.select(); } catch(e){} }, 260);
 }
 function pgChequear() {
-    var monto = parseInt(document.getElementById('pgMonto').value, 10) || 0;
+    var monto = CBDinero.leer(document.getElementById('pgMonto'));   // el campo lleva puntos de miles
     var w = document.getElementById('pgWarn');
     var t = document.getElementById('pgWarnTxt');
     if (monto > 0 && monto > __pgSaldo) {
@@ -880,7 +880,7 @@ document.getElementById('pgOverlay').addEventListener('click', function(e){ if (
 
     form.addEventListener('submit', function (e) {
         if (form.dataset.confirmado === '1') return;        // ya se confirmó
-        var monto = parseInt(document.getElementById('pgMonto').value, 10) || 0;
+        var monto = CBDinero.leer(document.getElementById('pgMonto'));
         if (monto <= 0 || monto <= __pgSaldo) return;        // nada que advertir
 
         e.preventDefault();

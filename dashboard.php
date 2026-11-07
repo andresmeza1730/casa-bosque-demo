@@ -8,6 +8,7 @@ $pageTitle = 'Dashboard';
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/validacion.php';   // validarMonto: el monto de un pago es un entero de pesos
+require_once __DIR__ . '/includes/deudas.php';   // la lista de deudores y el cobro de una deuda (4.4.0): una sola regla, la comparte el panel de Deudores
 require_once __DIR__ . '/includes/cifrado.php';   // descifrar teléfono de deudores
 define('CASA_BOSQUE', true);
 require_once __DIR__ . '/includes/notificaciones.php';
@@ -52,73 +53,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'revis
 }
 
 // ── Registrar pago de una deuda (estancia YA cerrada) ────────────────────────
-// Permite cobrar total o parcialmente a un deudor: inserta el pago y sube
-// estancias.total_abonado (sin sobrepasar el total). Al saldar, sale de la lista.
+// Total o abono. Desde 4.4.0 la regla (transacción, bloqueo, tope en el where, rowCount, auditoría)
+// vive en includes/deudas.php, porque el panel de Deudores cobra con la misma. Aquí solo se
+// comprueba el testigo; el permiso ya lo dio requireAdmin() de arriba.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'pagar_deuda') {
     if (validateCsrf()) {
-        $estId  = (int)($_POST['estancia_id'] ?? 0);
-        // 4.2.4: un entero de pesos y nada más. Antes (float): «12abc» cobraba 12 y «1e999» cobraba la deuda entera.
-        $monto  = validarMonto($_POST['monto'] ?? '', 1);
-        $metodo = in_array(($_POST['metodo'] ?? ''), ['efectivo','tarjeta','transferencia','nequi','otro'], true) ? $_POST['metodo'] : 'efectivo';
-        if ($estId > 0 && $monto === null) {
-            // Antes un monto inválido se descartaba SIN decir nada y parecía que el pago había entrado.
-            setFlash('El monto del pago debe ser un número entero de pesos mayor a cero, sin letras (por ejemplo 50000). No se registró nada.', 'danger');
-        } elseif ($estId > 0) {
-            // ── Transacción ANTES de leer, con la estancia bloqueada ──
-            // Antes el saldo se calculaba fuera de la transacción y el
-            // `update` no llevaba condición. Dos cobros simultáneos del mismo
-            // saldo —basta un doble clic: el modal no lo impide— leían el
-            // mismo `total_abonado`, calculaban el mismo saldo e insertaban
-            // DOS filas en `pagos`. `total_abonado` acababa por encima de
-            // `total_pagar`, la deuda quedaba negativa y la estancia
-            // desaparecía de la lista de deudores sin rastro del sobrecobro.
-            //
-            // Es el mismo antipatrón que 3.0.5 quitó de reservas, check-in y
-            // check-out: la transacción abría tarde.
-            try {
-                $pdo->beginTransaction();
-
-                $pdo->prepare("select id from estancias where id = ? for update")->execute([$estId]);
-
-                // La lectura que vale es la de DESPUÉS del bloqueo.
-                $st = $pdo->prepare("select total_pagar, total_abonado from estancias where id = ? and estado = 'cerrada'");
-                $st->execute([$estId]);
-                $e = $st->fetch();
-
-                $deuda = $e ? ((float)$e['total_pagar'] - (float)$e['total_abonado']) : 0.0;
-                if (!$e || $deuda <= 0) {
-                    $pdo->rollBack();
-                    setFlash('No se registró el pago: esa deuda ya estaba saldada.', 'warning');
-                } else {
-                    $abono = min($monto, $deuda);   // no cobrar más que lo que debe
-
-                    // Y el `update` lleva el tope en el propio `where`: aunque
-                    // alguien llegara hasta aquí sin el bloqueo, no puede dejar
-                    // lo abonado por encima de lo que se debe.
-                    $upd = $pdo->prepare("update estancias
-                                          set total_abonado = total_abonado + ?
-                                          where id = ? and estado = 'cerrada'
-                                            and total_abonado + ? <= total_pagar");
-                    $upd->execute([$abono, $estId, $abono]);
-
-                    if ($upd->rowCount() !== 1) {
-                        $pdo->rollBack();
-                        setFlash('No se registró el pago: la deuda cambió mientras se registraba. Revísala e intenta de nuevo.', 'warning');
-                    } else {
-                        $pdo->prepare("insert into pagos (estancia_id, monto, metodo, nota, usuario_id) values (?, ?, ?, 'Pago de deuda posterior al check-out', ?)")
-                            ->execute([$estId, $abono, $metodo, getCurrentUserId()]);
-                        $pdo->commit();
-                        setFlash('Pago de deuda registrado: $' . number_format($abono, 0, ',', '.') . ' COP.', 'success');
-                        if (function_exists('registrarAuditoria')) {
-                            registrarAuditoria($pdo, 'estancias', $estId, 'pago_deuda', "Pago de deuda \$" . (int)$abono . " ($metodo)");
-                        }
-                    }
-                }
-            } catch (Throwable $ex) {
-                if ($pdo->inTransaction()) $pdo->rollBack();
-                error_log('Pago de deuda: ' . $ex->getMessage());
-            }
-        }
+        [$msgPago, $tipoPago] = deudaRegistrarPago($pdo, (int) ($_POST['estancia_id'] ?? 0), $_POST['monto'] ?? '', $_POST['metodo'] ?? '');
+        setFlash($msgPago, $tipoPago);
     }
     header('Location: ' . BASE_URL . '/dashboard.php');
     exit;
@@ -129,16 +70,7 @@ require_once __DIR__ . '/includes/header.php';
 
 // ── Huéspedes que quedaron debiendo (check-out con saldo pendiente) ──────────
 // Deuda = total_pagar − total_abonado en estancias cerradas. "En mora" > 30 días.
-$deudores = $pdo->query("
-    select e.id, e.fecha_checkout, (e.total_pagar - e.total_abonado) as saldo,
-           datediff(now(), e.fecha_checkout) as dias,
-           h.numero as habitacion, hu.nombres, hu.apellidos, hu.telefono
-    from estancias e
-    join habitaciones h on h.id = e.habitacion_id
-    join huespedes hu on hu.id = e.huesped_id
-    where e.estado = 'cerrada' and e.total_pagar > e.total_abonado
-    order by e.fecha_checkout asc
-")->fetchAll();
+$deudores = deudasLista($pdo);   // includes/deudas.php: la misma lista que el panel de Deudores
 $totalDeuda = 0.0;
 foreach ($deudores as $dd) { $totalDeuda += (float)$dd['saldo']; }
 
@@ -544,45 +476,7 @@ $totalHuespedes = $pdo->query("
 </a>
 <?php endif; ?>
 
-<!-- Modal: registrar pago de una deuda -->
-<div id="pago-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.4);backdrop-filter:blur(5px);align-items:center;justify-content:center;padding:16px;">
-    <div style="background:#fff;width:100%;max-width:400px;border-radius:18px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,.2);">
-        <div style="padding:16px 20px;background:linear-gradient(150deg,#fdecec,#fff);border-bottom:1px solid #f4caca;">
-            <div style="font-weight:800;color:#b91c1c;display:flex;align-items:center;gap:8px;"><i class="fas fa-hand-holding-dollar"></i> Registrar pago de deuda</div>
-            <div id="pago-nombre" style="font-size:.82rem;color:#6E6054;margin-top:3px;"></div>
-        </div>
-        <form method="POST" action="dashboard.php" style="padding:18px 20px 20px;">
-            <?= csrfField() ?>
-            <input type="hidden" name="accion" value="pagar_deuda">
-            <input type="hidden" name="estancia_id" id="pago-estancia">
-            <div style="font-size:.85rem;color:#6E6054;margin-bottom:12px;">Debe <b id="pago-saldo-txt" style="color:#c0392b;"></b>. Puedes cobrar el total o un abono.</div>
-            <label style="display:block;font-size:.74rem;font-weight:600;color:#6E6054;margin-bottom:6px;">Monto a registrar (COP)</label>
-            <input type="number" name="monto" id="pago-monto" min="1" step="1" data-solo="digitos" required style="width:100%;padding:12px 13px;border:1px solid #E7E2D8;border-radius:11px;font-family:inherit;font-size:1rem;margin-bottom:14px;box-sizing:border-box;">
-            <label style="display:block;font-size:.74rem;font-weight:600;color:#6E6054;margin-bottom:8px;">Método</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;">
-                <label style="display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid #E7E2D8;border-radius:11px;font-size:.85rem;font-weight:600;color:#334155;cursor:pointer;"><input type="radio" name="metodo" value="efectivo" checked style="accent-color:#6B4420;"> Efectivo</label>
-                <label style="display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid #E7E2D8;border-radius:11px;font-size:.85rem;font-weight:600;color:#334155;cursor:pointer;"><input type="radio" name="metodo" value="tarjeta" style="accent-color:#6B4420;"> Tarjeta</label>
-                <label style="display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid #E7E2D8;border-radius:11px;font-size:.85rem;font-weight:600;color:#334155;cursor:pointer;"><input type="radio" name="metodo" value="transferencia" style="accent-color:#6B4420;"> Transfer.</label>
-                <label style="display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid #E7E2D8;border-radius:11px;font-size:.85rem;font-weight:600;color:#334155;cursor:pointer;"><input type="radio" name="metodo" value="nequi" style="accent-color:#6B4420;"> Nequi</label>
-                <label style="display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid #E7E2D8;border-radius:11px;font-size:.85rem;font-weight:600;color:#334155;cursor:pointer;"><input type="radio" name="metodo" value="otro" style="accent-color:#6B4420;"> Otro</label>
-            </div>
-            <div style="display:flex;justify-content:flex-end;gap:10px;">
-                <button type="button" onclick="cerrarPago()" style="padding:11px 16px;border-radius:11px;border:1px solid #E7E2D8;background:#fff;color:#475569;font-weight:600;cursor:pointer;font-family:inherit;">Cancelar</button>
-                <button type="submit" style="padding:11px 18px;border-radius:11px;border:none;background:#6B4420;color:#fff;font-weight:700;cursor:pointer;font-family:inherit;">Registrar pago</button>
-            </div>
-        </form>
-    </div>
-</div>
-<script>
-function abrirPago(id, nombre, saldo){
-    document.getElementById('pago-estancia').value = id;
-    document.getElementById('pago-nombre').textContent = nombre;
-    document.getElementById('pago-saldo-txt').textContent = '$' + Number(saldo).toLocaleString('es-CO');
-    var m = document.getElementById('pago-monto'); m.value = saldo; m.max = saldo;
-    document.getElementById('pago-modal').style.display = 'flex';
-}
-function cerrarPago(){ document.getElementById('pago-modal').style.display = 'none'; }
-(function(){ var ov = document.getElementById('pago-modal'); if(ov) ov.addEventListener('click', function(e){ if(e.target === ov) cerrarPago(); }); })();
+<?php $deudaModalAction = 'dashboard.php'; require __DIR__ . '/includes/deuda_modal.php'; ?>
 </script>
 <?php endif; ?>
 

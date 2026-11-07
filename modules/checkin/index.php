@@ -311,7 +311,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'checkin') {
 // ocupación antes de registrar la entrada. Recepción es el último sitio donde
 // se sabe cuánta gente llegó de verdad, y de eso depende el cobro.
 $reservasHoy = $pdo->query("select r.id, r.fecha_entrada, r.fecha_salida, r.num_personas,
-                                   h.numero, hu.nombres, hu.apellidos,
+                                   h.numero, h.notas as notas_hab, hu.nombres, hu.apellidos,
                                    t.nombre as tipo, t.tarifa_1, t.tarifa_2, t.tarifa_extra, t.tarifa_base,
                                    " . SQL_CAPACIDAD . " as capacidad_max,
                                    (select count(*) from acompanantes a where a.reserva_id = r.id) as num_acomp,
@@ -326,7 +326,7 @@ $reservasHoy = $pdo->query("select r.id, r.fecha_entrada, r.fecha_salida, r.num_
 // calcule al elegir la habitación, sin recargar. El que se cobra lo vuelve a
 // calcular el servidor al guardar; esto es solo para que nadie registre una
 // entrada a ciegas. Ver includes/tarifas.php.
-$habDisponibles = $pdo->query("select h.id, h.numero, t.nombre as tipo,
+$habDisponibles = $pdo->query("select h.id, h.numero, h.notas, t.nombre as tipo,
                                       t.tarifa_1, t.tarifa_2, t.tarifa_extra, t.tarifa_base,
                                       " . SQL_CAPACIDAD . " as capacidad_max
                                from habitaciones h, tipos_habitacion t
@@ -437,6 +437,9 @@ require_once __DIR__ . '/../../includes/header.php';
 .ci-ar-info { flex: 1; min-width: 0; }
 .ci-ar-name { font-size: .92rem; font-weight: 700; color: var(--cb-forest, #3E2412); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ci-ar-meta { font-size: .74rem; color: var(--cb-muted, #9A8778); margin-top: 1px; }
+.ci-notas-hab { margin-top: 8px; padding: 9px 12px; border: 1px solid #E6C37A; border-radius: 10px; background: #FFF7E6; color: #6B4420; font-size: .84rem; line-height: 1.4; white-space: pre-line; overflow-wrap: anywhere; }
+.ci-notas-hab[hidden] { display: none; }
+.ci-notas-hab i { margin-right: 4px; color: #B7791F; }
 .ci-room-badge { flex: none; font-size: .82rem; font-weight: 800; color: var(--cb-primary, #6B4420); background: var(--cb-primary-light, #F5EBDC); padding: 6px 12px; border-radius: 10px; }
 /* El `gap` es lo que de verdad separa la fecha del botón de acompañantes:
    `space-between` reparte el hueco SOBRANTE, y con el formulario de entrada
@@ -530,6 +533,9 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
                 <div class="ci-room-badge">Hab. <?= htmlspecialchars($r['numero']) ?></div>
             </div>
+            <?php if (trim((string) ($r['notas_hab'] ?? '')) !== ''): /* 4.5.0: la nota de la habitación reservada, a la vista al registrar la entrada */ ?>
+                <div class="ci-notas-hab"><i class="fas fa-sticky-note"></i> <span><?= htmlspecialchars(trim((string) $r['notas_hab'])) ?></span></div>
+            <?php endif; ?>
             <div class="ci-ar-foot">
                 <div class="ci-ar-date">Entrada: <b><?= date('d/m/Y', strtotime($r['fecha_entrada'])) ?></b></div>
                 <?php
@@ -651,9 +657,12 @@ require_once __DIR__ . '/../../includes/header.php';
                                 data-tarifa2="<?= $hab['tarifa_2'] !== null ? (int)$hab['tarifa_2'] : '' ?>"
                                 data-extra="<?= (int)($hab['tarifa_extra'] ?? 0) ?>"
                                 data-tarifa-base="<?= $hab['tarifa_base'] !== null ? (int)$hab['tarifa_base'] : '' ?>"
-                                data-cap="<?= (int)$hab['capacidad_max'] ?>"><?= htmlspecialchars('Habitación ' . $hab['numero'] . ' — ' . $hab['tipo']) ?></option>
+                                data-cap="<?= (int)$hab['capacidad_max'] ?>"
+                                data-notas="<?= htmlspecialchars((string) ($hab['notas'] ?? ''), ENT_QUOTES) ?>"><?= htmlspecialchars('Habitación ' . $hab['numero'] . ' — ' . $hab['tipo']) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <?php /* 4.5.0: lo que el hotel anotó de la habitación (ventilador, aire acondicionado…): sale al elegirla, como en Reservas. Se escribe como TEXTO. */ ?>
+                <div class="ci-notas-hab" id="ci-notas-hab" hidden><i class="fas fa-sticky-note"></i> <span id="ci-notas-hab-txt"></span></div>
             </div>
 
             <!-- Personas y precio. Aparecen al elegir la habitación: el menú se
@@ -699,6 +708,11 @@ require_once __DIR__ . '/../../includes/header.php';
         }
 
         function ciHabitacionCambiada(){
+            // Las notas de la habitación elegida (4.5.0), como TEXTO (textContent): lo escribe un administrador y podría llevar «<».
+            var selHab = document.getElementById('hab_ci'), opHab = selHab.options[selHab.selectedIndex];
+            var notasHab = (opHab && opHab.value) ? (opHab.dataset.notas || '').trim() : '';
+            document.getElementById('ci-notas-hab-txt').textContent = notasHab;
+            document.getElementById('ci-notas-hab').hidden = notasHab === '';
             var tipo   = ciTipoElegido();
             var campo  = document.getElementById('ci-pax-campo');
             var sel    = document.getElementById('ci_pax');

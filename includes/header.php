@@ -331,6 +331,9 @@ $__cbAvisoIcono = $__cbAviso['tipo'] === 'mantenimiento' ? 'screwdriver-wrench'
             <a href="<?= BASE_URL ?>/modules/checkout/index.php" class="<?= $currentDir === 'checkout' ? 'active' : '' ?>">
                 <span class="nav-icon"><i class="fas fa-door-closed"></i></span> Check-out
             </a>
+            <a href="<?= BASE_URL ?>/modules/deudores/index.php" class="<?= $currentDir === 'deudores' ? 'active' : '' ?>">
+                <span class="nav-icon"><i class="fas fa-hand-holding-dollar"></i></span> Deudores
+            </a>
 
             <a href="<?= BASE_URL ?>/modules/usuarios/seguridad.php" class="<?= ($currentPage ?? '') === 'seguridad' ? 'active' : '' ?>">
                 <span class="nav-icon"><i class="fas fa-shield-halved"></i></span> Seguridad (2FA)

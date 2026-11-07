@@ -4,6 +4,7 @@ $pageTitle = 'Consumos';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/validacion.php';   // validarMonto, validarEntero (montos que se teclean)
+require_once __DIR__ . '/../../includes/categorias.php';   // las categorías de la carta (5.0.0): las mismas que administra Carta y Restaurante
 requireLogin();
 
 $pdo = getDB();
@@ -172,9 +173,31 @@ $estancias = $pdo->query("
     order by cast(h.numero as unsigned), h.numero
 ")->fetchAll();
 
-$categoriasCarta = ['snack' => 'Tienda · Mecato', 'bebida' => 'Tienda · Bebidas', 'servicio' => 'Servicios', 'restaurante' => 'Restaurante', 'otro' => 'Otros'];
+// 5.0.0: las categorías ya no son una lista fija: salen de includes/categorias.php (las crea el administrador en Carta y Restaurante).
+$categoriasCarta = categoriasMapa($pdo);
 $productosCarta = $pdo->query('select id, nombre, categoria, precio from productos where activo = 1 order by categoria, nombre')->fetchAll(PDO::FETCH_ASSOC);
+// Los productos en el orden de las categorías (el de siempre primero y luego las nuevas), y dentro de cada una por nombre: el selector de la venta de
+// mostrador los agrupa por categoría y los botones de filtro salen en ese mismo orden.
+$ordenCategorias = array_flip(array_column(categoriasLista($pdo, false), 'clave'));
+usort($productosCarta, fn($a, $b) => [$ordenCategorias[$a['categoria']] ?? 999, mb_strtolower($a['nombre'])] <=> [$ordenCategorias[$b['categoria']] ?? 999, mb_strtolower($b['nombre'])]);
+// Los botones de filtro: las categorías ACTIVAS que tienen algún producto activo. Los productos de una categoría desactivada se siguen vendiendo y salen
+// bajo «Todas».
+$categoriasFiltro = [];
+foreach (categoriasLista($pdo, true) as $cf) {
+    if (in_array($cf['clave'], array_column($productosCarta, 'categoria'), true)) $categoriasFiltro[] = $cf;
+}
 $productosMostrador = $productosCarta;
+/** Los botones de filtro de un selector de productos (assets/js/filtro-categorias.js). Solo se dibujan si hay dos o más categorías con productos. */
+function csFiltroCategorias(string $idSelect, array $categorias): void
+{
+    if (count($categorias) < 2) return;
+    echo '<div class="cs-cats" data-filtro-para="' . htmlspecialchars($idSelect, ENT_QUOTES) . '" role="group" aria-label="Filtrar los productos por categoría">';
+    echo '<button type="button" class="cs-cat on" data-cat="" aria-pressed="true">Todas</button>';
+    foreach ($categorias as $c) {
+        echo '<button type="button" class="cs-cat" data-cat="' . htmlspecialchars($c['clave'], ENT_QUOTES) . '" aria-pressed="false">' . htmlspecialchars($c['nombre']) . '</button>';
+    }
+    echo '</div>';
+}
 $restauranteAbierto = date('H:i') >= '08:00' && date('H:i') < '20:00';
 // Cuándo vuelve a abrir, para poder decirlo en el aviso. Antes de las 8:00 abre
 // hoy mismo; a partir de las 20:00 ya no, así que toca mañana.
@@ -253,6 +276,10 @@ require_once __DIR__ . '/../../includes/header.php';
 .cs-select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7b69' d='M6 8 0 0h12z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 38px; }
 .cs-input:focus, .cs-select:focus { outline: none; border-color: var(--cb-primary,#6B4420); box-shadow: 0 0 0 3px rgba(107,68,32,.1); }
 .cs-help { font-size: .72rem; color: var(--cb-muted,#9A8778); margin-top: 6px; }
+.cs-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.cs-cat { min-height: 38px; padding: 0 13px; border: 1px solid rgba(107,68,32,.25); border-radius: 999px; background: #fff; color: var(--cb-primary,#6B4420); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.cs-cat.on { background: var(--cb-primary,#6B4420); border-color: transparent; color: #fff; }
+.cs-cat:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
 .cs-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 /* 4.2.0: el producto (y el botón) a todo el ancho. En dos columnas el selector medía ~150 px y se leía «Seleccionar prod…». */
 .cs-row2 > .cs-span2 { grid-column: 1 / -1; }
@@ -326,6 +353,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <?= csrfField() ?><input type="hidden" name="action" value="venta_mostrador">
                 <div class="cs-field cs-span2">
                     <label for="venta-producto">Producto</label>
+                    <?php csFiltroCategorias('venta-producto', $categoriasFiltro); ?>
                     <select class="cs-select" id="venta-producto" name="producto_id" required>
                         <option value="">Seleccionar producto...</option>
                         <?php /* Agrupado por categoría (la consulta ya viene ordenada por ella): así cada opción es «nombre · $precio» y no se corta. */ ?>
@@ -335,7 +363,7 @@ require_once __DIR__ . '/../../includes/header.php';
                                 $catActual = $producto['categoria'];
                                 echo '<optgroup label="' . htmlspecialchars($categoriasCarta[$catActual] ?? 'Otros') . '">';
                             endif; ?>
-                            <option value="<?= (int)$producto['id'] ?>"><?= htmlspecialchars($producto['nombre']) ?> · $<?= number_format((float)$producto['precio'],0,',','.') ?></option>
+                            <option value="<?= (int)$producto['id'] ?>" data-categoria="<?= htmlspecialchars($producto['categoria'], ENT_QUOTES) ?>"><?= htmlspecialchars($producto['nombre']) ?> · $<?= number_format((float)$producto['precio'],0,',','.') ?></option>
                         <?php endforeach; if ($catActual !== null) echo '</optgroup>'; ?>
                     </select>
                 </div>
@@ -418,10 +446,11 @@ require_once __DIR__ . '/../../includes/header.php';
 
                 <div class="cs-field">
                     <label for="producto_id"><i class="fas fa-utensils"></i> Carta y Restaurante</label>
+                    <?php csFiltroCategorias('producto_id', $categoriasFiltro); ?>
                     <select name="producto_id" id="producto_id" class="cs-select" onchange="actualizarProducto()">
                         <option value="0">Otro concepto (registro manual)</option>
                         <?php foreach ($productosCarta as $producto): ?>
-                            <option value="<?= (int)$producto['id'] ?>" data-nombre="<?= htmlspecialchars($producto['nombre'], ENT_QUOTES, 'UTF-8') ?>" data-precio="<?= number_format((float)$producto['precio'], 2, '.', '') ?>">
+                            <option value="<?= (int)$producto['id'] ?>" data-categoria="<?= htmlspecialchars($producto['categoria'], ENT_QUOTES) ?>" data-nombre="<?= htmlspecialchars($producto['nombre'], ENT_QUOTES, 'UTF-8') ?>" data-precio="<?= number_format((float)$producto['precio'], 2, '.', '') ?>">
                                 <?= htmlspecialchars($producto['nombre']) ?> · <?= htmlspecialchars($categoriasCarta[$producto['categoria']] ?? 'Otros') ?> · $<?= number_format((float)$producto['precio'], 0, ',', '.') ?>
                             </option>
                         <?php endforeach; ?>
@@ -437,7 +466,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="cs-row2">
                     <div class="cs-field">
                         <label for="precio"><i class="fas fa-coins"></i> Precio (COP)</label>
-                        <input type="number" name="precio" id="precio" class="cs-input" placeholder="0" min="1" step="1" data-solo="digitos" required oninput="calcularSubtotal()">
+                        <input type="text" inputmode="numeric" autocomplete="off" name="precio" id="precio" class="cs-input" placeholder="0" min="1" data-solo="moneda" required oninput="calcularSubtotal()">
                     </div>
                     <div class="cs-field">
                         <label for="cantidad"><i class="fas fa-hashtag"></i> Cantidad</label>
@@ -510,12 +539,12 @@ function actualizarProducto() {
     descripcion.readOnly = !manual;
     precio.readOnly = !manual;
     descripcion.value = manual ? '' : (opcion.dataset.nombre || '');
-    precio.value = manual ? '' : (opcion.dataset.precio || '');
+    CBDinero.poner(precio, manual ? '' : (opcion.dataset.precio || ''));   // con sus puntos de miles
     calcularSubtotal();
 }
 
 function calcularSubtotal() {
-    const precio = parseFloat(document.getElementById('precio').value) || 0;
+    const precio = CBDinero.leer(document.getElementById('precio'));   // el campo lleva puntos de miles: no se lee con parseFloat
     const cantidad = parseInt(document.getElementById('cantidad').value) || 0;
     const subtotal = precio * cantidad;
     const preview = document.getElementById('subtotal-preview');
@@ -529,5 +558,6 @@ function calcularSubtotal() {
     }
 }
 </script>
+<script src="<?= BASE_URL ?>/assets/js/filtro-categorias.js?v=<?= APP_VERSION ?>"></script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

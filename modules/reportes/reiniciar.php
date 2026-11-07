@@ -34,6 +34,7 @@ requireAdmin();   // exclusivo del administrador
 // Borrar los datos del hotel es irreversible: aunque el equipo esté recordado,
 // aquí se pide el código. Ver includes/equipos.php.
 require_once __DIR__ . '/../../includes/equipos.php';
+require_once __DIR__ . '/../../includes/categorias.php';   // categoriasRestablecer(): el reinicio total deja las categorías de la carta como de instalación (5.0.0)
 exigirCodigoEnAccionCritica();
 
 $pdo = getDB();
@@ -135,6 +136,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
             } catch (Exception $e) {}
+
+            // 5.0.0: en el reinicio TOTAL el catálogo vuelve a como se instala: las categorías que creó el hotel se borran y las cinco de siempre
+            // recuperan su nombre y quedan activas (sin ellas un producto nuevo no tendría categoría que elegir). En el parcial no se tocan.
+            if ($modo !== 'parcial') {
+                try { categoriasRestablecer($pdo); } catch (Throwable $e) { $errores[] = 'categorias_producto'; }
+            }
 
             // La sesión de quien acaba de reiniciar vuelve a quedar registrada (la tabla se vació arriba).
             if (function_exists('sesionRegistrar')) { sesionRegistrar($pdo, (int) getCurrentUserId()); }

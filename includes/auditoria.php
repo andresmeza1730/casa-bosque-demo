@@ -114,7 +114,7 @@ function auditoriaModulos(): array {
         'Check-out'            => [[['estancias'], ['checkout', 'reabrir_cuenta'], null]],
         'Caja y pagos'         => [[['pagos'], null, null], [['estancias'], ['pago_deuda'], null]],
         'Consumos'             => [[['consumos', 'ventas_mostrador'], null, null]],
-        'Carta y Restaurante'  => [[['productos'], null, null]],
+        'Carta y Restaurante'  => [[['productos', 'categorias_producto'], null, null]],   // 5.0.0: las categorías de la carta
         'Habitaciones'         => [[['habitaciones', 'tipos_habitacion'], null, null]],
         'Facturación'          => [[['facturas'], null, null]],
         'Reportes'             => [[['estancias'], ['exportar_ingresos'], null], [['auditoria'], ['exportar_auditoria'], null]],
@@ -182,6 +182,9 @@ const AUDITORIA_CAMPOS = [
     'habitaciones'     => ['numero', 'piso', 'tipo_id', 'capacidad_max', 'tarifa', 'estado'],
     'tipos_habitacion' => ['nombre', 'capacidad_max', 'tarifa_1', 'tarifa_2', 'tarifa_extra'],
     'productos'        => ['nombre', 'precio', 'categoria', 'activo'],
+    // 5.0.0: las categorías de la carta. SIN `clave`: «clave» está en la lista de nombres que NUNCA se guardan (más abajo: es el nombre de una contraseña),
+    // así que el código de la categoría va en el `detalle` del registro y aquí solo el nombre y si está activa.
+    'categorias_producto' => ['nombre', 'activa'],
     'reservas'         => ['habitacion_id', 'fecha_entrada', 'fecha_salida', 'num_personas', 'estado', 'abono_reserva', 'metodo_abono'],
     'usuarios'         => ['rol', 'activo'],
     'facturas'         => ['estado', 'total'],
