@@ -103,9 +103,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email     = trim($_POST['email'] ?? '');
             $ciudad    = trim($_POST['ciudad_origen'] ?? '');
 
+            // 5.1.0: el nombre y el documento (tipo y número) los corrige SOLO el administrador. Lo decide el SERVIDOR: a recepción el
+            // formulario le sale con esos campos de solo lectura, pero quien mande el POST a mano con otro nombre o documento no cambia
+            // nada, porque aquí ni se leen.
+            // Un POST SIN ninguno de los cuatro campos (el de antes de 5.1.0, o uno hecho a mano) sigue siendo una edición de contacto: no se
+            // exige lo que no se mandó. Si viene alguno, se valida TODO el bloque, y uno vacío es un error, no «sin cambios».
+            $corrige = isAdmin() && (isset($_POST['documento_tipo']) || isset($_POST['documento_num']) || isset($_POST['nombres']) || isset($_POST['apellidos']));
+            $docTipo = $docNorm = $nombres = $apellidos = null;
+            $errorIdentidad = null;
+            if ($corrige) {
+                $campoTexto = fn(string $c): string => is_string($_POST[$c] ?? null) ? trim($_POST[$c]) : '';
+                $docTipo   = strtoupper($campoTexto('documento_tipo'));
+                $docNum    = $campoTexto('documento_num');
+                $nombres   = $campoTexto('nombres');
+                $apellidos = $campoTexto('apellidos');
+                // El tipo es el del ENUM de la tabla (CC, CE, PAS, NIT): TI y RC no caben en la columna.
+                $docNorm   = in_array($docTipo, ['CC', 'CE', 'PAS', 'NIT'], true) ? validarDocumentoTipo($docTipo, $docNum) : null;
+                if ($docNum === '' || $nombres === '' || $apellidos === '') {
+                    $errorIdentidad = 'Documento, nombres y apellidos son obligatorios. No se guardó nada.';
+                } elseif ($docNorm === null) {
+                    $errorIdentidad = ($docTipo === 'PAS'
+                        ? 'El pasaporte solo puede llevar letras y números (entre 3 y 30 caracteres).'
+                        : 'El número de documento solo puede llevar números (entre 3 y 20), sin letras.') . ' No se guardó nada.';
+                } elseif (mb_strlen($nombres) > 100 || mb_strlen($apellidos) > 100) {
+                    $errorIdentidad = 'Los nombres y los apellidos no pueden pasar de 100 caracteres. No se guardó nada.';
+                }
+            }
+
             $telNorm = $telefono === '' ? '' : validarTelefono($telefono);
             if ($id > 0 && $telNorm === null) {
                 $msg = 'El teléfono no es válido: solo números (mínimo 7), y puede llevar +, - y paréntesis. No se guardó nada.';
+                $msgType = 'danger';
+            } elseif ($id > 0 && $errorIdentidad !== null) {
+                $msg = $errorIdentidad;
                 $msgType = 'danger';
             } elseif ($id > 0 && ($estadoHu = huespedParaEditar($pdo, $id)) !== 'ok') {
                 // 4.3.1: ni uno que no existe ni uno ANONIMIZADO. Antes el servidor no miraba (la interfaz solo escondía el lápiz) y quien mandara
@@ -121,21 +151,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // valores (ver includes/auditoria.php): la fila no se puede borrar y
                 // el huésped tiene derecho a que se le anonimice. Se compara lo
                 // descifrado, porque el teléfono cifrado cambia en cada guardado.
-                $stPrevio = $pdo->prepare("select telefono, email, ciudad_origen from huespedes where id = ?");
-                $stPrevio->execute([$id]);
-                $previo = $stPrevio->fetch(PDO::FETCH_ASSOC) ?: [];
-                $camposCambiados = auditoriaCambiaCampos(
-                    ['telefono' => (string) descifrar($previo['telefono'] ?? null), 'email' => (string) ($previo['email'] ?? ''), 'ciudad_origen' => (string) ($previo['ciudad_origen'] ?? '')],
-                    ['telefono' => $telefono, 'email' => $email, 'ciudad_origen' => $ciudad]
-                );
-                // `anonimizado_en is null` también en el `where`: si lo anonimizaron entre la lectura y este update, no se escribe nada.
-                $stmt = $pdo->prepare("update huespedes set telefono = ?, email = ?, ciudad_origen = ? where id = ? and anonimizado_en is null");
-                $stmt->execute([cifrar($telefono), $email, $ciudad, $id]);
-                if ($stmt->rowCount() === 0 && huespedParaEditar($pdo, $id) !== 'ok') {
-                    $msg = 'Ese huésped fue anonimizado mientras se editaba: no se guardó nada.';
+                // 5.1.0: la fila se lee `for update` dentro de una transacción. Cambiar el documento mira «¿ya lo tiene otro?» y escribe el
+                // índice ciego nuevo: si la lectura y la escritura no fueran una sola unidad, dos ediciones a la vez podrían dejar el mismo
+                // documento en dos huéspedes (el índice único lo frena, pero es mejor decirlo que dejar caer una excepción).
+                $duplicado = false; $anonimizado = false; $camposCambiados = ['campos_modificados' => []]; $cambiaDoc = $cambiaNombre = false;
+                $pdo->beginTransaction();
+                try {
+                    $stPrevio = $pdo->prepare("select documento_tipo, documento_num, nombres, apellidos, telefono, email, ciudad_origen, anonimizado_en from huespedes where id = ? for update");
+                    $stPrevio->execute([$id]);
+                    $previo = $stPrevio->fetch(PDO::FETCH_ASSOC) ?: [];
+                    if (!$previo || $previo['anonimizado_en'] !== null) {
+                        $anonimizado = true;
+                    } else {
+                        $docPrevio = (string) descifrar($previo['documento_num']);
+                        $antes   = ['telefono' => (string) descifrar($previo['telefono'] ?? null), 'email' => (string) ($previo['email'] ?? ''), 'ciudad_origen' => (string) ($previo['ciudad_origen'] ?? '')];
+                        $despues = ['telefono' => $telefono, 'email' => $email, 'ciudad_origen' => $ciudad];
+                        if ($corrige) {
+                            $antes   += ['documento_tipo' => (string) $previo['documento_tipo'], 'documento_num' => $docPrevio, 'nombres' => (string) $previo['nombres'], 'apellidos' => (string) $previo['apellidos']];
+                            $despues += ['documento_tipo' => $docTipo, 'documento_num' => $docNorm, 'nombres' => $nombres, 'apellidos' => $apellidos];
+                            $cambiaDoc    = $docTipo !== (string) $previo['documento_tipo'] || $docNorm !== $docPrevio;
+                            $cambiaNombre = $nombres !== (string) $previo['nombres'] || $apellidos !== (string) $previo['apellidos'];
+                            if ($cambiaDoc && $docNorm !== $docPrevio) {
+                                $stDup = $pdo->prepare("select id from huespedes where documento_hash = ? and id <> ? limit 1");
+                                $stDup->execute([indiceCiego($docNorm), $id]);
+                                $duplicado = (bool) $stDup->fetch();
+                            }
+                        }
+                        // De un huésped la auditoría guarda QUÉ campos cambiaron, nunca sus valores (ver includes/auditoria.php): la fila no
+                        // se puede borrar y el huésped tiene derecho a que se le anonimice. Se compara lo descifrado, porque el teléfono
+                        // cifrado cambia en cada guardado.
+                        $camposCambiados = auditoriaCambiaCampos($antes, $despues);
+                        if (!$duplicado) {
+                            // Los nombres de columna son fijos, nunca de una entrada. `anonimizado_en is null` también en el `where`.
+                            $set = ['telefono = ?', 'email = ?', 'ciudad_origen = ?'];
+                            $args = [cifrar($telefono), $email, $ciudad];
+                            if ($cambiaDoc) {
+                                array_push($set, 'documento_tipo = ?', 'documento_num = ?', 'documento_hash = ?');
+                                array_push($args, $docTipo, cifrar($docNorm), indiceCiego($docNorm));
+                            }
+                            if ($cambiaNombre) {
+                                array_push($set, 'nombres = ?', 'apellidos = ?');
+                                array_push($args, $nombres, $apellidos);
+                            }
+                            $args[] = $id;
+                            $stmt = $pdo->prepare('update huespedes set ' . implode(', ', $set) . ' where id = ? and anonimizado_en is null');
+                            $stmt->execute($args);
+                            if ($stmt->rowCount() === 0 && huespedParaEditar($pdo, $id) !== 'ok') $anonimizado = true;
+                        }
+                    }
+                    if ($duplicado || $anonimizado) $pdo->rollBack(); else $pdo->commit();
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    // 1062: otro huésped quedó con ese documento justo ahora (el índice único lo frenó).
+                    if ($e instanceof PDOException && (int) ($e->errorInfo[1] ?? 0) === 1062) { $duplicado = true; } else { throw $e; }
+                }
+                if ($duplicado) {
+                    $msg = 'Ya existe otro huésped con ese número de documento. No se guardó nada.';
+                    $msgType = 'warning';
+                } elseif ($anonimizado) {
+                    $msg = 'Ese huésped fue anonimizado (borrado seguro) o ya no existe: no se guardó nada.';
                     $msgType = 'danger';
                 } else {
-                    registrarAuditoria($pdo, 'huespedes', $id, 'editar', "Datos de contacto actualizados", null, $camposCambiados);
+                    // Sin valores: ni el nombre ni el documento, ni antes ni después, van al `detalle`.
+                    $partes = array_filter([$cambiaNombre ? 'el nombre' : null, $cambiaDoc ? 'el documento' : null]);
+                    registrarAuditoria($pdo, 'huespedes', $id, 'editar',
+                        $partes ? 'Corrigió ' . implode(' y ', $partes) . " del huésped #$id" : 'Datos de contacto actualizados', null, $camposCambiados);
                     $msg = 'Datos del huésped actualizados correctamente.';
                     $msgType = 'success';
                 }
@@ -260,6 +340,8 @@ foreach ($huespedes as &$_h) {
 }
 unset($_h);
 
+// 5.1.0: el nombre y el documento se corrigen solo siendo administrador (el servidor lo vuelve a decidir al guardar).
+$puedeCorregir = isAdmin();
 $editId = (int)($_GET['editar'] ?? 0);
 $editData = null;
 if ($editId > 0) {
@@ -379,7 +461,7 @@ $huPrev = function (string $campo, string $porDefecto = '') use ($huConservar): 
 <div class="hu-card">
     <div class="hu-card-h">
         <h3>
-            <?php if ($editData): ?><i class="fas fa-user-pen" style="color:#f59e0b;"></i> Editar contacto
+            <?php if ($editData): ?><i class="fas fa-user-pen" style="color:#f59e0b;"></i> <?= $puedeCorregir ? 'Editar huésped' : 'Editar contacto' ?>
             <?php else: ?><i class="fas fa-user-plus" style="color:var(--cb-primary,#6B4420);"></i> Nuevo huésped<?php endif; ?>
         </h3>
         <?php if ($editData): ?><a href="?" class="cancel"><i class="fas fa-times"></i> Cancelar</a><?php endif; ?>
@@ -393,7 +475,7 @@ $huPrev = function (string $campo, string $porDefecto = '') use ($huConservar): 
             <div class="hu-row2">
                 <div class="hu-field">
                     <label><i class="fas fa-id-card"></i> Tipo</label>
-                    <select name="documento_tipo" class="hu-select" required <?= $editData ? 'disabled' : '' ?>>
+                    <select name="documento_tipo" class="hu-select" required <?= ($editData && !$puedeCorregir) ? 'disabled' : '' ?>>
                         <?php foreach (['CC', 'CE', 'PAS', 'NIT'] as $tipoDoc): ?>
                             <option value="<?= $tipoDoc ?>" <?= (($editData['documento_tipo'] ?? $huPrev('documento_tipo')) === $tipoDoc) ? 'selected' : '' ?>><?= $tipoDoc ?></option>
                         <?php endforeach; ?>
@@ -401,23 +483,25 @@ $huPrev = function (string $campo, string $porDefecto = '') use ($huConservar): 
                 </div>
                 <div class="hu-field">
                     <label><i class="fas fa-hashtag"></i> N° Documento</label>
-                    <input type="text" name="documento_num" class="hu-input" required maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="documento_tipo" <?= $editData ? '' : 'data-verifica-documento="' . BASE_URL . '/modules/huespedes/existe.php" data-ficha-url="' . BASE_URL . '/modules/huespedes/ficha.php" data-bloquea="1"' ?> placeholder="1234567890" value="<?= htmlspecialchars($editData['documento_num'] ?? $huPrev('documento_num')) ?>" <?= $editData ? 'readonly' : '' ?>>
+                    <input type="text" name="documento_num" class="hu-input" required maxlength="30" inputmode="numeric" data-solo="documento" data-tipo-en="documento_tipo" <?= $editData ? '' : 'data-verifica-documento="' . BASE_URL . '/modules/huespedes/existe.php" data-ficha-url="' . BASE_URL . '/modules/huespedes/ficha.php" data-bloquea="1"' ?> placeholder="1234567890" value="<?= htmlspecialchars($editData['documento_num'] ?? $huPrev('documento_num')) ?>" <?= ($editData && !$puedeCorregir) ? 'readonly' : '' ?>>
                 </div>
             </div>
 
             <div class="hu-row2" style="grid-template-columns:1fr 1fr;">
                 <div class="hu-field">
                     <label><i class="fas fa-user"></i> Nombres</label>
-                    <input type="text" name="nombres" class="hu-input" required placeholder="Juan Carlos" value="<?= htmlspecialchars($editData['nombres'] ?? $huPrev('nombres')) ?>" <?= $editData ? 'readonly' : '' ?>>
+                    <input type="text" name="nombres" class="hu-input" required placeholder="Juan Carlos" value="<?= htmlspecialchars($editData['nombres'] ?? $huPrev('nombres')) ?>" <?= ($editData && !$puedeCorregir) ? 'readonly' : '' ?>>
                 </div>
                 <div class="hu-field">
                     <label><i class="fas fa-user"></i> Apellidos</label>
-                    <input type="text" name="apellidos" class="hu-input" required placeholder="García López" value="<?= htmlspecialchars($editData['apellidos'] ?? $huPrev('apellidos')) ?>" <?= $editData ? 'readonly' : '' ?>>
+                    <input type="text" name="apellidos" class="hu-input" required placeholder="García López" value="<?= htmlspecialchars($editData['apellidos'] ?? $huPrev('apellidos')) ?>" <?= ($editData && !$puedeCorregir) ? 'readonly' : '' ?>>
                 </div>
             </div>
 
-            <?php if ($editData): ?>
-                <div class="hu-note"><i class="fas fa-circle-info"></i> Solo los datos de contacto son editables.</div>
+            <?php if ($editData && $puedeCorregir): ?>
+                <div class="hu-note"><i class="fas fa-circle-info"></i> Como administrador puedes corregir el nombre y el documento. Las facturas que ya se emitieron conservan los datos con los que se emitieron.</div>
+            <?php elseif ($editData): ?>
+                <div class="hu-note"><i class="fas fa-circle-info"></i> Aquí puedes editar los datos de contacto. Para corregir el nombre o el documento, pídeselo al administrador.</div>
             <?php endif; ?>
 
             <div class="hu-field">
